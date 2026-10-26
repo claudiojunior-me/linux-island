@@ -5,10 +5,13 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {setTimeout as sleep} from 'node:timers/promises';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 
-const BUS_NAME = 'io.github.claudiojunior_me.LinuxIsland';
+import {BUS_NAME, OBJECT_PATH} from '../../src/core/bus-address.js';
+import {parseGdbusString} from '../../src/cli/command.js';
+
 const SETTINGS_SCHEMA = 'org.gnome.shell.extensions.linux-island';
-const OBJECT_PATH = '/io/github/claudiojunior_me/LinuxIsland';
+const ISLAND_CLI = fileURLToPath(new URL('../../bin/island', import.meta.url));
 
 function gdbusCall(dest, objectPath, method, ...args) {
     return execFileSync('gdbus', [
@@ -18,17 +21,32 @@ function gdbusCall(dest, objectPath, method, ...args) {
 
 const island = (method, ...args) => gdbusCall(BUS_NAME, OBJECT_PATH, `${BUS_NAME}.${method}`, ...args);
 
-// gdbus prints a single string result as ('value',)
-const unwrapString = output => output.match(/^\('(.*)',\)$/s)[1];
+const cli = (...args) => execFileSync(ISLAND_CLI, args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
 
-const state = () => JSON.parse(unwrapString(island('GetState', 'pomodoro')));
+const state = (pluginId = 'pomodoro') => JSON.parse(parseGdbusString(island('GetState', pluginId)));
 
 // Runs JavaScript inside the shell; needs gnome-shell --unsafe-mode.
 function shellEval(code) {
     const output = gdbusCall('org.gnome.Shell', '/org/gnome/Shell', 'org.gnome.Shell.Eval', code);
-    const [, ok, result] = output.match(/^\((true|false), '(.*)'\)$/s);
-    assert.equal(ok, 'true', `Eval failed: ${result}`);
-    return JSON.parse(result);
+    assert.ok(output.startsWith('(true,'), `Eval failed: ${output}`);
+    return JSON.parse(parseGdbusString(output));
+}
+
+// Every label text inside the island actor, in tree order.
+const islandTexts = () => shellEval(`(() => {
+    const texts = [];
+    const walk = actor => {
+        if (actor.text !== undefined && actor.text !== null) texts.push(actor.text);
+        actor.get_children().forEach(walk);
+    };
+    walk(Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island'));
+    return texts;
+})()`);
+
+function screenshot(name) {
+    gdbusCall('org.gnome.Shell.Screenshot', '/org/gnome/Shell/Screenshot',
+        'org.gnome.Shell.Screenshot.Screenshot', 'false', 'false',
+        path.join(process.env.E2E_SCREENSHOT_DIR, name));
 }
 
 function setSetting(key, value) {
@@ -56,9 +74,9 @@ before(async () => {
     throw new Error(`${BUS_NAME} never appeared on the session bus`);
 });
 
-test('exposes the pomodoro plugin as foreground', () => {
-    assert.equal(island('ListPlugins'), "(['pomodoro'],)");
-    assert.equal(unwrapString(island('GetForeground')), 'pomodoro');
+test('exposes the plugins with pomodoro as foreground', () => {
+    assert.equal(cli('list'), 'pomodoro\nactivities');
+    assert.equal(cli('foreground'), 'pomodoro');
 });
 
 test('island is on screen, centered below the top bar', () => {
@@ -102,20 +120,9 @@ test('pomodoro runs, pauses, skips and resets inside the shell', async () => {
 test('island shows the running countdown', async () => {
     island('Activate', 'pomodoro', 'start');
     await sleep(1500);
-    const labels = shellEval(`(() => {
-        const texts = [];
-        const walk = actor => {
-            if (actor.text !== undefined && actor.text !== null) texts.push(actor.text);
-            actor.get_children().forEach(walk);
-        };
-        walk(Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island'));
-        return texts;
-    })()`);
-    assert.ok(labels.includes(state().countdown), `countdown missing from island: ${labels}`);
-
-    const screenshot = path.join(process.env.E2E_SCREENSHOT_DIR, 'island-running.png');
-    gdbusCall('org.gnome.Shell.Screenshot', '/org/gnome/Shell/Screenshot',
-        'org.gnome.Shell.Screenshot.Screenshot', 'false', 'false', screenshot);
+    const texts = islandTexts();
+    assert.ok(texts.includes(state().countdown), `countdown missing from island: ${texts}`);
+    screenshot('island-running.png');
     island('Activate', 'pomodoro', 'reset');
 });
 
@@ -130,4 +137,27 @@ test('changing the work duration setting updates the idle countdown', async () =
 
     setSetting('pomodoro-work-minutes', '25');
     await waitFor(() => state().countdown === '25:00', 'countdown 25:00');
+});
+
+test('a live activity pushed from the CLI takes over the island until it ends', async () => {
+    cli('activities', 'push', '--id', 'build', '--title', 'cargo build', '--subtitle', 'compiling', '--progress', '0.4');
+    assert.equal(cli('foreground'), 'activities');
+    await waitFor(() => islandTexts().includes('cargo build'), 'activity title on the island');
+    await sleep(400);
+    screenshot('island-activity.png');
+
+    cli('activities', 'end', '--id', 'build');
+    assert.equal(cli('foreground'), 'pomodoro');
+    await waitFor(() => !islandTexts().includes('cargo build'), 'activity gone from the island');
+});
+
+test('a live activity with a timeout ends by itself', async () => {
+    cli('activities', 'push', '--id', 'done', '--title', 'Done', '--accent', 'success', '--timeout-seconds', '1');
+    assert.equal(state('activities').activities.length, 1);
+    await sleep(2500);
+    assert.deepEqual(state('activities'), {activities: []});
+});
+
+test('the CLI reports invalid activities as errors', () => {
+    assert.throws(() => cli('activities', 'push', '--id', 'x'), /activity title is required/);
 });

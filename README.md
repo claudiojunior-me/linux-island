@@ -2,7 +2,10 @@
 
 A Dynamic Island for GNOME on Ubuntu and Debian. A black pill sits centered below the top bar, shows whatever plugin has something going on, and expands on click to reveal controls.
 
-The first plugin is a pomodoro timer.
+Plugins:
+
+- **Pomodoro**: focus and break timer with configurable durations.
+- **Live activities**: cards any script can push, e.g. build progress or "waiting for you".
 
 ## Requirements
 
@@ -34,22 +37,52 @@ dbus-run-session gnome-shell --nested --wayland
 - A notification and sound mark the end of each phase. Phases do not auto-start; press start when ready.
 - Durations live in the preferences window: `gnome-extensions prefs linux-island@claudiojunior-me.github.io`. A phase already in progress keeps its length; changes apply from the next phase.
 
-### Control from scripts and keybindings
+### Command line
 
-The island publishes a D-Bus API on the session bus:
+`bin/island` drives the island from scripts and keybindings. Link it somewhere on your `PATH`:
 
 ```sh
-DEST=io.github.claudiojunior_me.LinuxIsland
-OBJ=/io/github/claudiojunior_me/LinuxIsland
+ln -s "$PWD/bin/island" ~/.local/bin/island
 
-gdbus call --session --dest $DEST --object-path $OBJ --method $DEST.ListPlugins
-gdbus call --session --dest $DEST --object-path $OBJ --method $DEST.Activate pomodoro toggle
-gdbus call --session --dest $DEST --object-path $OBJ --method $DEST.GetState pomodoro
+island list
+island state pomodoro
+island pomodoro toggle            # also: start, pause, skip, reset
 ```
 
-Pomodoro actions: `toggle`, `start`, `pause`, `skip`, `reset`.
+Bind `island pomodoro toggle` to a custom shortcut in Settings > Keyboard to start and pause focus without the mouse.
 
-Bind the `Activate ... toggle` command to a custom shortcut in Settings > Keyboard to start and pause focus without the mouse.
+### Live activities
+
+```sh
+island activities push --id build --title "cargo build" --subtitle compiling --progress 0.4
+island activities push --id build --title "cargo build" --accent success --timeout-seconds 10
+island activities end --id build
+island activities clear
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--id` | Required. Pushing the same id updates the card |
+| `--title` | Required |
+| `--subtitle` | Secondary line |
+| `--progress` | 0 to 1; shows a bar |
+| `--icon` | Symbolic icon name, e.g. `emblem-ok-symbolic` |
+| `--accent` | `normal`, `attention`, `success` or `error` |
+| `--timeout-seconds` | Ends the card by itself |
+
+Activities take the island over the pomodoro while they exist. `attention` cards come first, then the most recently pushed. Click to expand and see every card; each has a dismiss button.
+
+### D-Bus API
+
+The CLI is a thin client over `io.github.claudiojunior_me.LinuxIsland` at `/io/github/claudiojunior_me/LinuxIsland`:
+
+| Method | Signature |
+| --- | --- |
+| `ListPlugins` | `() -> as` |
+| `GetForeground` | `() -> s` |
+| `GetState` | `(s pluginId) -> s stateJson` |
+| `Activate` | `(s pluginId, s action)` |
+| `Send` | `(s pluginId, s action, s payloadJson)` |
 
 ## Architecture
 
@@ -58,16 +91,21 @@ extension.js                 GNOME Shell entry point (enable/disable)
 src/core/                    Pure JavaScript, no GNOME imports, runs in Node tests
   plugin-registry.js         Holds plugins, picks the foreground one, dispatches actions
   island-control.js          Control API, exported as-is over D-Bus
+  bus-address.js             Bus name and object path of that API
   listeners.js               Change notification helper
   clock-format.js            MM:SS countdown text
+src/cli/command.js           Command line parsing for bin/island
 src/shell/                   GNOME Shell only
   box.js                     Vertical box that works on every supported shell version
   island.js                  The pill: positioning, compact/expanded switch, resize animation
   control-bus.js             Publishes IslandControl on the session bus
+  progress-bar.js            Progress bar shared by plugin views
 prefs.js                     Preferences window, driven by the settings schema
 schemas/                     GSettings schema
 src/plugins/
   catalog.js                 Plugins the island loads
+  activities/plugin.js       Live activities (pure)
+  activities/shell.js        Live activity views
   pomodoro/timer.js          Pomodoro state machine (pure)
   pomodoro/plugin.js         Plugin contract implementation (pure)
   pomodoro/settings.js       Settings keys for the pomodoro durations
@@ -88,7 +126,7 @@ Pure part (`src/plugins/<name>/plugin.js`):
 | --- | --- |
 | `id`, `title`, `priority` | Identity and foreground ranking |
 | `hasActivity()` | `true` when the plugin wants the island |
-| `handleAction(action)` | Reacts to buttons and D-Bus `Activate`; throws on unknown actions |
+| `handleAction(action, payload)` | Reacts to buttons, D-Bus `Activate` and `Send` (payload is the parsed JSON object); throws on unknown actions |
 | `getState()` | JSON-serializable state for views and D-Bus `GetState` |
 | `subscribe(listener)` | Emits `{type: 'changed'}` and plugin-specific events; returns an unsubscribe function |
 | `tick()` | Optional, called once a second |

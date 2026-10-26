@@ -1,9 +1,8 @@
 // ABOUTME: Publishes the island control API on the session bus so scripts and keybindings can drive plugins.
-// ABOUTME: Example: gdbus call --session --dest io.github.claudiojunior_me.LinuxIsland ... Activate pomodoro toggle
+// ABOUTME: bin/island is the friendly client; any D-Bus client works, e.g. gdbus call ... Activate pomodoro toggle
 import Gio from 'gi://Gio';
 
-export const BUS_NAME = 'io.github.claudiojunior_me.LinuxIsland';
-export const OBJECT_PATH = '/io/github/claudiojunior_me/LinuxIsland';
+import {BUS_NAME, OBJECT_PATH} from '../core/bus-address.js';
 
 const INTERFACE_XML = `
 <node>
@@ -21,6 +20,11 @@ const INTERFACE_XML = `
     <method name="Activate">
       <arg name="pluginId" type="s" direction="in"/>
       <arg name="action" type="s" direction="in"/>
+    </method>
+    <method name="Send">
+      <arg name="pluginId" type="s" direction="in"/>
+      <arg name="action" type="s" direction="in"/>
+      <arg name="payloadJson" type="s" direction="in"/>
     </method>
   </interface>
 </node>`;

@@ -24,4 +24,17 @@ export class IslandControl {
     Activate(pluginId, action) {
         this._registry.dispatch(pluginId, action);
     }
+
+    // Like Activate, with a JSON object of action data, e.g. the fields of a live activity.
+    Send(pluginId, action, payloadJson) {
+        let payload;
+        try {
+            payload = JSON.parse(payloadJson);
+        } catch {
+            payload = null;
+        }
+        if (payload === null || typeof payload !== 'object' || Array.isArray(payload))
+            throw new Error(`payload must be a JSON object, got: ${payloadJson}`);
+        this._registry.dispatch(pluginId, action, payload);
+    }
 }

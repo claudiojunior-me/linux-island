@@ -61,23 +61,38 @@ export class Island {
         this.actor.show();
 
         const shell = this._shells.get(plugin.id);
-        if (plugin.id !== this._foregroundId) {
-            this._foregroundId = plugin.id;
+        if (plugin.id === this._foregroundId) {
+            shell.update(plugin.getState());
+            return;
+        }
+
+        const swap = () => {
             this._header.set_child(shell.compact);
             this._expandedBin.set_child(shell.expanded);
-        }
-        shell.update(plugin.getState());
+            shell.update(plugin.getState());
+        };
+        if (this._foregroundId === null)
+            swap();
+        else
+            this._resizeAnimated(swap);
+        this._foregroundId = plugin.id;
     }
 
     _setExpanded(expanded) {
         this._expanded = expanded;
-        const [startWidth, startHeight] = this.actor.get_size();
+        this._resizeAnimated(() => {
+            this._expandedBin.visible = expanded;
+            if (expanded)
+                this.actor.add_style_pseudo_class('expanded');
+            else
+                this.actor.remove_style_pseudo_class('expanded');
+        });
+    }
 
-        this._expandedBin.visible = expanded;
-        if (expanded)
-            this.actor.add_style_pseudo_class('expanded');
-        else
-            this.actor.remove_style_pseudo_class('expanded');
+    // Applies a content change, then grows or shrinks the pill from its old size to the new one.
+    _resizeAnimated(change) {
+        const [startWidth, startHeight] = this.actor.get_size();
+        change();
 
         const [, , targetWidth, targetHeight] = this.actor.get_preferred_size();
         this.actor.remove_all_transitions();

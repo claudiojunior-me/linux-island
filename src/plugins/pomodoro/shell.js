@@ -6,6 +6,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {verticalBox} from '../../shell/box.js';
+import {ProgressBar} from '../../shell/progress-bar.js';
 import {timerOptionsFromSettings} from './settings.js';
 import {Phase} from './timer.js';
 
@@ -31,27 +32,6 @@ function controlButton(iconName, accessibleName, onClick) {
     return button;
 }
 
-// A thin bar whose fill follows the progress of the current phase.
-class ProgressBar {
-    constructor(styleClass) {
-        this._progress = 0;
-        this.actor = new St.Widget({style_class: `pomodoro-progress-track ${styleClass}`, x_expand: true});
-        this._fill = new St.Widget({style_class: 'pomodoro-progress-fill'});
-        this.actor.add_child(this._fill);
-        this.actor.connect('notify::width', () => this._redraw());
-    }
-
-    update(progress, phase) {
-        this._progress = progress;
-        this._fill.set_style_class_name(`pomodoro-progress-fill ${phase}`);
-        this._redraw();
-    }
-
-    _redraw() {
-        this._fill.width = Math.round(this.actor.width * this._progress);
-    }
-}
-
 export function createPomodoroShell(plugin, {settings}) {
     plugin.configure(timerOptionsFromSettings(settings));
     const settingsChangedId = settings.connect('changed',
@@ -61,7 +41,7 @@ export function createPomodoroShell(plugin, {settings}) {
     const compactRow = new St.BoxLayout({style_class: 'pomodoro-compact-row'});
     const phaseDot = new St.Widget({style_class: 'pomodoro-phase-dot', y_align: Clutter.ActorAlign.CENTER});
     const compactCountdown = new St.Label({style_class: 'pomodoro-countdown', y_align: Clutter.ActorAlign.CENTER});
-    const compactProgress = new ProgressBar('compact');
+    const compactProgress = new ProgressBar();
     compactRow.add_child(phaseDot);
     compactRow.add_child(compactCountdown);
     compact.add_child(compactRow);
