@@ -262,3 +262,46 @@ test('a real Todoist task due today shows in the pill beside the pomodoro bubble
             await api('DELETE', `/tasks/${created.id}`);
         }
     });
+
+const islandVisible = () => shellEval(`(() => {
+    const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+    return group.visible;
+})()`);
+
+const settingsButtonVisible = () => shellEval(`(() => {
+    const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+    let found = null;
+    const walk = actor => {
+        if (actor.accessible_name === 'Linux Island settings') found = actor;
+        actor.get_children().forEach(walk);
+    };
+    walk(group);
+    return found !== null && found.mapped;
+})()`);
+
+test('disabling mini-apps unloads them live and enabling brings them back', async () => {
+    try {
+        setSetting('enabled-plugins', "['pomodoro', 'activities']");
+        await waitFor(() => cli('list') === 'pomodoro\nactivities', 'privacy and todoist unloaded');
+        assert.throws(() => cli('state', 'todoist'), /unknown plugin: todoist/);
+
+        setSetting('enabled-plugins', "['activities']");
+        await waitFor(() => !islandVisible(), 'island hidden with nothing to show');
+
+        setSetting('enabled-plugins', "['pomodoro', 'activities']");
+        await waitFor(() => islandVisible() && islandTexts().includes('25:00'), 'pomodoro back in the pill');
+    } finally {
+        setSetting('enabled-plugins', "['pomodoro', 'activities', 'privacy', 'todoist']");
+        await waitFor(() => cli('list').split('\n').length === 4, 'all plugins loaded again');
+    }
+});
+
+test('the expanded pill offers a settings button, collapsed it does not', async () => {
+    assert.equal(settingsButtonVisible(), false);
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'settings button when expanded');
+    await sleep(400);
+    screenshot('island-expanded-settings.png');
+    clickIslandPart('header');
+    await waitFor(() => !settingsButtonVisible(), 'settings button hidden when collapsed');
+});

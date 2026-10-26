@@ -33,12 +33,22 @@ dbus-run-session gnome-shell --devkit
 dbus-run-session gnome-shell --nested --wayland
 ```
 
+## Settings
+
+One window with a page per area:
+
+- **Mini-apps**: switch each mini-app on or off. A disabled mini-app is unloaded at once: no sensors, no polling, gone from the D-Bus API.
+- **Pomodoro**: durations.
+- **Todoist**: API token.
+
+Open it from the gear button at the bottom of the expanded island, from **Linux Island** in the app grid (installed by `scripts/install.sh`), with `island settings`, or from the Extensions app.
+
 ## Usage
 
 - Click the pill to expand or collapse it.
 - Expanded pomodoro: reset, start/pause, skip phase.
 - A notification and sound mark the end of each phase. Phases do not auto-start; press start when ready.
-- Durations live in the preferences window: `gnome-extensions prefs linux-island@claudiojunior-me.github.io`. A phase already in progress keeps its length; changes apply from the next phase.
+- Durations live on the Pomodoro page of the settings window. A phase already in progress keeps its length; changes apply from the next phase.
 
 ### Command line
 
@@ -49,6 +59,7 @@ ln -s "$PWD/bin/island" ~/.local/bin/island
 
 island list
 island state pomodoro
+island settings                   # opens the settings window
 island pomodoro toggle            # also: start, pause, skip, reset
 ```
 
@@ -95,7 +106,7 @@ Only sessions running on the same desktop session as the island can reach it.
 
 ### Todoist
 
-Paste a personal API token (Todoist: Settings, Integrations, Developer) in the preferences window and press apply. The token is stored in dconf as plain text, readable by any process running as you.
+Paste a personal API token (Todoist: Settings, Integrations, Developer) on the Todoist page of the settings window and press apply. The token is stored in dconf as plain text, readable by any process running as you.
 
 The current task is the first of `today | overdue` ordered by priority, then timed tasks by time, then due date, then Todoist's own order. Tasks refresh every 5 minutes; `island todoist refresh` forces it, `island todoist complete --id <task id>` completes one. Checking a task removes it at once and puts it back if Todoist rejects the change.
 
@@ -110,13 +121,15 @@ The CLI is a thin client over `io.github.claudiojunior_me.LinuxIsland` at `/io/g
 | `GetState` | `(s pluginId) -> s stateJson` |
 | `Activate` | `(s pluginId, s action)` |
 | `Send` | `(s pluginId, s action, s payloadJson)` |
+| `OpenSettings` | `()` |
 
 ## Architecture
 
 ```
 extension.js                 GNOME Shell entry point (enable/disable)
 src/core/                    Pure JavaScript, no GNOME imports, runs in Node tests
-  plugin-registry.js         Holds plugins, picks the foreground one, dispatches actions
+  plugin-registry.js         Holds plugins, picks the visible ones, dispatches actions
+  plugin-loader.js           Loads and unloads plugins to match the enabled list
   island-control.js          Control API, exported as-is over D-Bus
   bus-address.js             Bus name and object path of that API
   listeners.js               Change notification helper
@@ -132,10 +145,11 @@ src/shell/                   GNOME Shell only
   control-bus.js             Publishes IslandControl on the session bus
   progress-bar.js            Progress bar shared by plugin views
   http.js                    Async HTTP client for plugins that call web APIs
-prefs.js                     Preferences window, driven by the settings schema
+prefs.js                     Settings window: Mini-apps, Pomodoro and Todoist pages
 schemas/                     GSettings schema
 src/plugins/
-  catalog.js                 Plugins the island loads
+  manifest.js                Id, title and description of each plugin (pure, read by settings)
+  catalog.js                 Plugin and shell factories per id
   activities/plugin.js       Live activities (pure)
   activities/shell.js        Live activity views
   todoist/api.js             Todoist API v1 calls over an injected HTTP function (pure)
@@ -173,7 +187,7 @@ Pure part (`src/plugins/<name>/plugin.js`):
 
 Shell part (`src/plugins/<name>/shell.js`) exports a factory `(plugin, {settings})` returning `{compact, expanded, minimal, update(state), destroy()}`. `compact` and `expanded` go in the pill, `minimal` in the bubble; all three are St actors.
 
-Register both in `src/plugins/catalog.js`.
+Add the plugin to `src/plugins/manifest.js` (id, title, description) and its factories to `src/plugins/catalog.js`, then add the id to the `enabled-plugins` default in the schema.
 
 ## Tests
 

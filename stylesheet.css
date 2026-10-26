@@ -38,6 +38,25 @@
     padding-top: 8px;
 }
 
+.island-footer {
+    padding-top: 6px;
+}
+
+.island-settings-button {
+    border-radius: 99px;
+    padding: 4px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.island-settings-button:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.island-settings-icon {
+    icon-size: 14px;
+}
+
 .pomodoro-compact {
     spacing: 4px;
 }

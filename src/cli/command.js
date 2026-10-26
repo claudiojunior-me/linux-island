@@ -5,6 +5,7 @@ export const USAGE = `usage:
   island list
   island foreground
   island state <plugin>
+  island settings
   island <plugin> <action> [--option value ...]
 
 examples:
@@ -40,6 +41,8 @@ export function parseCommand(argv) {
         return {method: 'ListPlugins', args: []};
     if (first === 'foreground' && second === undefined)
         return {method: 'GetForeground', args: []};
+    if (first === 'settings' && second === undefined)
+        return {method: 'OpenSettings', args: []};
     if (first === 'state' && second !== undefined && rest.length === 0)
         return {method: 'GetState', args: [second]};
     if (first === undefined || second === undefined || first === 'state')

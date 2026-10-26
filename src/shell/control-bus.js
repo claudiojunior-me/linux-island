@@ -21,6 +21,7 @@ const INTERFACE_XML = `
       <arg name="pluginId" type="s" direction="in"/>
       <arg name="action" type="s" direction="in"/>
     </method>
+    <method name="OpenSettings"/>
     <method name="Send">
       <arg name="pluginId" type="s" direction="in"/>
       <arg name="action" type="s" direction="in"/>

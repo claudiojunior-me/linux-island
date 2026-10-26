@@ -43,3 +43,7 @@ test('reads gdbus string and string array results', () => {
     assert.deepEqual(parseGdbusStringArray("(['pomodoro', 'activities'],)"), ['pomodoro', 'activities']);
     assert.deepEqual(parseGdbusStringArray('(@as [],)'), []);
 });
+
+test('settings maps to OpenSettings', () => {
+    assert.deepEqual(parseCommand(['settings']), {method: 'OpenSettings', args: []});
+});
