@@ -18,6 +18,9 @@ export XDG_DATA_HOME="$SANDBOX/data"
 export XDG_CACHE_HOME="$SANDBOX/cache"
 export XDG_STATE_HOME="$SANDBOX/state"
 export XDG_RUNTIME_DIR="$SANDBOX/runtime"
+# Keeps gvfs from mounting a FUSE filesystem inside the sandbox, which would block its cleanup.
+export GIO_USE_VFS=local
+export GVFS_DISABLE_FUSE=1
 mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
@@ -37,7 +40,7 @@ dbus-run-session -- bash -c '
     trap "kill $SHELL_PID 2>/dev/null || true" EXIT
 
     status=0
-    node --test "$2/tests/e2e/" || status=$?
+    node --test "$2/tests/e2e/*.e2e.test.js" || status=$?
     if [ "$status" -ne 0 ]; then
         echo "---- gnome-shell log ----" >&2
         cat "$XDG_STATE_HOME/gnome-shell.log" >&2
