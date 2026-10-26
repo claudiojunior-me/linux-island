@@ -1,0 +1,7 @@
+{
+  "uuid": "linux-island@claudiojunior-me.github.io",
+  "name": "Linux Island",
+  "description": "A Dynamic Island for GNOME: a pill below the top bar that shows live plugins, starting with a pomodoro timer.",
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "url": "https://github.com/claudiojunior-me/linux-island"
+}
