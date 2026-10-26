@@ -1,0 +1,9 @@
+{
+  "name": "linux-island",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test 'tests/unit/**/*.test.js' 'tests/integration/**/*.test.js'",
+    "test:e2e": "tests/e2e/run.sh"
+  }
+}
