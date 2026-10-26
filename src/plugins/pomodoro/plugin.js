@@ -9,6 +9,7 @@ export class PomodoroPlugin {
         this.id = 'pomodoro';
         this.title = 'Pomodoro';
         this.priority = 10;
+        this.showsWhenIdle = true;
         this._clock = clock;
         this._timer = new PomodoroTimer(timerOptions);
         this._listeners = new Listeners();

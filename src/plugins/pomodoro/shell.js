@@ -1,4 +1,4 @@
-// ABOUTME: Everything the pomodoro shows inside GNOME Shell: compact and expanded island views plus alerts.
+// ABOUTME: Everything the pomodoro shows inside GNOME Shell: compact, expanded and minimal views plus alerts.
 // ABOUTME: Buttons send actions to the plugin; update(state) redraws from the plugin's state.
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
@@ -32,20 +32,34 @@ function controlButton(iconName, accessibleName, onClick) {
     return button;
 }
 
+// Phase-colored dot followed by the countdown; used in the pill and in the bubble.
+function phaseClock() {
+    const actor = new St.BoxLayout({style_class: 'pomodoro-compact-row'});
+    const dot = new St.Widget({style_class: 'pomodoro-phase-dot', y_align: Clutter.ActorAlign.CENTER});
+    const countdown = new St.Label({style_class: 'pomodoro-countdown', y_align: Clutter.ActorAlign.CENTER});
+    actor.add_child(dot);
+    actor.add_child(countdown);
+    return {
+        actor,
+        update(state) {
+            dot.set_style_class_name(`pomodoro-phase-dot ${state.phase}`);
+            countdown.text = state.countdown;
+        },
+    };
+}
+
 export function createPomodoroShell(plugin, {settings}) {
     plugin.configure(timerOptionsFromSettings(settings));
     const settingsChangedId = settings.connect('changed',
         () => plugin.configure(timerOptionsFromSettings(settings)));
 
     const compact = verticalBox({style_class: 'pomodoro-compact'});
-    const compactRow = new St.BoxLayout({style_class: 'pomodoro-compact-row'});
-    const phaseDot = new St.Widget({style_class: 'pomodoro-phase-dot', y_align: Clutter.ActorAlign.CENTER});
-    const compactCountdown = new St.Label({style_class: 'pomodoro-countdown', y_align: Clutter.ActorAlign.CENTER});
+    const compactClock = phaseClock();
     const compactProgress = new ProgressBar();
-    compactRow.add_child(phaseDot);
-    compactRow.add_child(compactCountdown);
-    compact.add_child(compactRow);
+    compact.add_child(compactClock.actor);
     compact.add_child(compactProgress.actor);
+
+    const minimalClock = phaseClock();
 
     const expanded = verticalBox({style_class: 'pomodoro-expanded'});
     const phaseLabel = new St.Label({style_class: 'pomodoro-phase-label', x_align: Clutter.ActorAlign.CENTER});
@@ -72,9 +86,10 @@ export function createPomodoroShell(plugin, {settings}) {
     return {
         compact,
         expanded,
+        minimal: minimalClock.actor,
         update(state) {
-            phaseDot.set_style_class_name(`pomodoro-phase-dot ${state.phase}`);
-            compactCountdown.text = state.countdown;
+            compactClock.update(state);
+            minimalClock.update(state);
             compactProgress.update(state.progress, state.phase);
             phaseLabel.text = PHASE_LABELS[state.phase];
             bigCountdown.text = state.countdown;
@@ -88,6 +103,7 @@ export function createPomodoroShell(plugin, {settings}) {
             unsubscribe();
             compact.destroy();
             expanded.destroy();
+            minimalClock.actor.destroy();
         },
     };
 }

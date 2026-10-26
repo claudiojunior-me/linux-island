@@ -1,4 +1,4 @@
-// ABOUTME: Island views for live activities: the top activity in compact form, every activity when expanded.
+// ABOUTME: Island views for live activities: the top activity in compact and minimal form, every one when expanded.
 // ABOUTME: Expanded rows have a dismiss button that ends the activity.
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
@@ -42,16 +42,24 @@ function activityRow(plugin, activity) {
 export function createActivitiesShell(plugin) {
     const compact = verticalBox({style_class: 'activity-compact'});
     const expanded = verticalBox({style_class: 'activity-list'});
+    const minimal = new St.BoxLayout({style_class: 'activity-compact-row'});
 
     return {
         compact,
         expanded,
+        minimal,
         update({activities}) {
             compact.destroy_all_children();
             expanded.destroy_all_children();
+            minimal.destroy_all_children();
             const [top] = activities;
             if (!top)
                 return;
+
+            minimal.add_child(marker(top));
+            minimal.add_child(new St.Label({
+                style_class: 'island-bubble-label', text: top.title, y_align: Clutter.ActorAlign.CENTER,
+            }));
 
             const line = new St.BoxLayout({style_class: 'activity-compact-row'});
             line.add_child(marker(top));
@@ -81,6 +89,7 @@ export function createActivitiesShell(plugin) {
         destroy() {
             compact.destroy();
             expanded.destroy();
+            minimal.destroy();
         },
     };
 }

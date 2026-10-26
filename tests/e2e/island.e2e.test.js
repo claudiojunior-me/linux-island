@@ -175,3 +175,45 @@ test('the Claude Code hook mirrors a session on the island', async () => {
     event('SessionEnd');
     assert.deepEqual(state('activities'), {activities: []});
 });
+
+const clickIslandPart = name => shellEval(`(() => {
+    const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+    const pill = group.get_children().find(a => a.name === 'linux-island-pill');
+    const part = name === 'header' ? pill.get_first_child() : group.get_children().find(a => a.name === name);
+    part.emit('clicked', 1);
+    return true;
+})()`);
+
+const bubbleState = () => shellEval(`(() => {
+    const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+    const bubble = group.get_children().find(a => a.name === 'linux-island-bubble');
+    const texts = [];
+    const walk = actor => {
+        if (actor.text !== undefined && actor.text !== null) texts.push(actor.text);
+        actor.get_children().forEach(walk);
+    };
+    walk(bubble);
+    return {visible: bubble.visible, texts};
+})()`);
+
+test('an activity and the idle pomodoro share the island: pill and bubble', async () => {
+    assert.equal(bubbleState().visible, false);
+
+    cli('activities', 'push', '--id', 'task', '--title', 'Write report');
+    await waitFor(() => bubbleState().visible, 'bubble to appear');
+    assert.ok(bubbleState().texts.includes('25:00'), `pomodoro missing from bubble: ${bubbleState().texts}`);
+    await sleep(400);
+    screenshot('island-two-slots.png');
+
+    clickIslandPart('linux-island-bubble');
+    await waitFor(() => islandTexts().includes('Focus'), 'pomodoro expanded in the pill');
+    assert.equal(bubbleState().visible, false);
+    await sleep(400);
+    screenshot('island-bubble-expanded.png');
+
+    clickIslandPart('header');
+    await waitFor(() => bubbleState().visible, 'bubble back after collapsing');
+
+    cli('activities', 'end', '--id', 'task');
+    await waitFor(() => !bubbleState().visible, 'bubble gone when only the pomodoro is left');
+});

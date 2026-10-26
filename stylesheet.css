@@ -9,6 +9,25 @@
     min-width: 96px;
 }
 
+.island-group {
+    spacing: 8px;
+}
+
+.island-bubble {
+    background-color: rgba(0, 0, 0, 0.94);
+    color: #ffffff;
+    border-radius: 18px;
+    padding: 6px 12px;
+}
+
+.island-bubble:hover {
+    background-color: rgba(30, 30, 30, 0.94);
+}
+
+.island-bubble-label {
+    max-width: 160px;
+}
+
 .island:expanded {
     border-radius: 26px;
     padding: 12px 22px 16px;

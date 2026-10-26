@@ -41,7 +41,7 @@ test('toggle through the control starts and pauses the timer', () => {
     assert.equal(state.countdown, '23:00');
 });
 
-test('active pomodoro takes the foreground from an idle higher priority plugin', () => {
+test('idle pomodoro stays on the island; idle plugins that hide when idle never show', () => {
     const {registry, control} = setup();
     registry.register({
         id: 'idle-high',
@@ -53,7 +53,7 @@ test('active pomodoro takes the foreground from an idle higher priority plugin',
 
     assert.equal(control.GetForeground(), 'pomodoro');
     registry.unregister('pomodoro');
-    assert.equal(control.GetForeground(), 'idle-high');
+    assert.equal(control.GetForeground(), '');
 });
 
 test('paused mid-phase still counts as activity, reset clears it', () => {
