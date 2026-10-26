@@ -5,6 +5,8 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import {verticalBox} from './box.js';
+
 const GAP_BELOW_PANEL = 6;
 const RESIZE_DURATION_MS = 250;
 
@@ -17,10 +19,9 @@ export class Island {
         this._expanded = false;
         this._disconnects = [];
 
-        this.actor = new St.BoxLayout({
+        this.actor = verticalBox({
             name: 'linux-island',
             style_class: 'island',
-            orientation: Clutter.Orientation.VERTICAL,
             reactive: true,
             clip_to_allocation: true,
         });

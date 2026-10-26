@@ -6,7 +6,7 @@ The first plugin is a pomodoro timer.
 
 ## Requirements
 
-- GNOME Shell 48, 49 or 50 (Ubuntu 25.04+, Debian 13+)
+- GNOME Shell 46 to 50 (Ubuntu 24.04+, Debian 13+)
 - Node.js 20+ (only to run the tests)
 
 ## Install
@@ -23,7 +23,7 @@ To try it without touching your session, run a nested shell:
 ```sh
 # GNOME 49 and later
 dbus-run-session gnome-shell --devkit
-# GNOME 48
+# GNOME 46 to 48
 dbus-run-session gnome-shell --nested --wayland
 ```
 
@@ -60,6 +60,7 @@ src/core/                    Pure JavaScript, no GNOME imports, runs in Node tes
   listeners.js               Change notification helper
   clock-format.js            MM:SS countdown text
 src/shell/                   GNOME Shell only
+  box.js                     Vertical box that works on every supported shell version
   island.js                  The pill: positioning, compact/expanded switch, resize animation
   control-bus.js             Publishes IslandControl on the session bus
 src/plugins/

@@ -5,6 +5,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import {verticalBox} from '../../shell/box.js';
 import {Phase} from './timer.js';
 
 const PHASE_LABELS = {
@@ -51,7 +52,7 @@ class ProgressBar {
 }
 
 export function createPomodoroShell(plugin) {
-    const compact = new St.BoxLayout({style_class: 'pomodoro-compact', orientation: Clutter.Orientation.VERTICAL});
+    const compact = verticalBox({style_class: 'pomodoro-compact'});
     const compactRow = new St.BoxLayout({style_class: 'pomodoro-compact-row'});
     const phaseDot = new St.Widget({style_class: 'pomodoro-phase-dot', y_align: Clutter.ActorAlign.CENTER});
     const compactCountdown = new St.Label({style_class: 'pomodoro-countdown', y_align: Clutter.ActorAlign.CENTER});
@@ -61,7 +62,7 @@ export function createPomodoroShell(plugin) {
     compact.add_child(compactRow);
     compact.add_child(compactProgress.actor);
 
-    const expanded = new St.BoxLayout({style_class: 'pomodoro-expanded', orientation: Clutter.Orientation.VERTICAL});
+    const expanded = verticalBox({style_class: 'pomodoro-expanded'});
     const phaseLabel = new St.Label({style_class: 'pomodoro-phase-label', x_align: Clutter.ActorAlign.CENTER});
     const bigCountdown = new St.Label({style_class: 'pomodoro-big-countdown', x_align: Clutter.ActorAlign.CENTER});
     const sessionsLabel = new St.Label({style_class: 'pomodoro-sessions', x_align: Clutter.ActorAlign.CENTER});
