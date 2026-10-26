@@ -1,0 +1,17 @@
+#!/usr/bin/env node
+// ABOUTME: Claude Code hook that mirrors each session's status as a live activity on the island.
+// ABOUTME: Prints nothing and always exits 0, so Claude Code is never blocked or fed extra context.
+import {callIsland} from '../src/cli/bus-client.js';
+import {activityCommandForHook} from '../src/integrations/claude-code/activity.js';
+
+try {
+    let input = '';
+    for await (const chunk of process.stdin)
+        input += chunk;
+
+    const command = activityCommandForHook(JSON.parse(input));
+    if (command)
+        callIsland('Send', ['activities', command.action, JSON.stringify(command.payload)], {timeoutMs: 1000});
+} catch {
+    // The island may not be running; Claude Code must carry on regardless.
+}

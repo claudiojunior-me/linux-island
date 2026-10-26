@@ -161,3 +161,17 @@ test('a live activity with a timeout ends by itself', async () => {
 test('the CLI reports invalid activities as errors', () => {
     assert.throws(() => cli('activities', 'push', '--id', 'x'), /activity title is required/);
 });
+
+test('the Claude Code hook mirrors a session on the island', async () => {
+    const hook = fileURLToPath(new URL('../../bin/claude-code-hook', import.meta.url));
+    const event = name => execFileSync(hook, [], {
+        input: JSON.stringify({session_id: 'e2e-session', cwd: '/home/me/linux-island', hook_event_name: name}),
+    });
+
+    event('UserPromptSubmit');
+    await waitFor(() => islandTexts().includes('Claude · linux-island'), 'Claude card on the island');
+    event('Notification');
+    assert.equal(state('activities').activities[0].accent, 'attention');
+    event('SessionEnd');
+    assert.deepEqual(state('activities'), {activities: []});
+});

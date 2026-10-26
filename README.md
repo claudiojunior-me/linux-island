@@ -6,6 +6,7 @@ Plugins:
 
 - **Pomodoro**: focus and break timer with configurable durations.
 - **Live activities**: cards any script can push, e.g. build progress or "waiting for you".
+- **Claude Code status**: one card per Claude Code session: working, waiting for you, finished.
 
 ## Requirements
 
@@ -72,6 +73,24 @@ island activities clear
 
 Activities take the island over the pomodoro while they exist. `attention` cards come first, then the most recently pushed. Click to expand and see every card; each has a dismiss button.
 
+### Claude Code status
+
+```sh
+scripts/install-claude-code-hooks.js              # adds hooks to ~/.claude/settings.json
+scripts/install-claude-code-hooks.js --uninstall  # removes only those hooks
+```
+
+The installer keeps your other hooks, honors `CLAUDE_CONFIG_DIR`, and saves the previous file as `settings.json.linux-island-backup`. It points the hooks at this checkout, so re-run it if you move the repository.
+
+| Claude Code event | Card |
+| --- | --- |
+| `UserPromptSubmit` | `Claude · <project>`, "Working…" |
+| `Notification` | Claude's message (permission, waiting for input), `attention` accent, jumps to the front |
+| `Stop` | "Finished, your turn", `success` accent, ends after 2 minutes |
+| `SessionEnd` | Card removed |
+
+Only sessions running on the same desktop session as the island can reach it.
+
 ### D-Bus API
 
 The CLI is a thin client over `io.github.claudiojunior_me.LinuxIsland` at `/io/github/claudiojunior_me/LinuxIsland`:
@@ -94,7 +113,11 @@ src/core/                    Pure JavaScript, no GNOME imports, runs in Node tes
   bus-address.js             Bus name and object path of that API
   listeners.js               Change notification helper
   clock-format.js            MM:SS countdown text
-src/cli/command.js           Command line parsing for bin/island
+bin/island                   Command line client
+bin/claude-code-hook         Claude Code hook that feeds live activities
+scripts/                     Installers for the extension and the Claude Code hooks
+src/cli/                     Command line parsing and the gdbus client
+src/integrations/claude-code/  Hook event mapping and settings.json editing (pure)
 src/shell/                   GNOME Shell only
   box.js                     Vertical box that works on every supported shell version
   island.js                  The pill: positioning, compact/expanded switch, resize animation
