@@ -23,5 +23,10 @@
       <default>4</default>
       <summary>Focus sessions before a long break</summary>
     </key>
+    <key name="todoist-api-token" type="s">
+      <default>''</default>
+      <summary>Todoist API token</summary>
+      <description>Personal token from Todoist Settings, Integrations, Developer. Stored in dconf as plain text.</description>
+    </key>
   </schema>
 </schemalist>

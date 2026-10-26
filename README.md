@@ -7,6 +7,7 @@ Plugins:
 - **Pomodoro**: focus and break timer with configurable durations.
 - **Live activities**: cards any script can push, e.g. build progress or "waiting for you".
 - **Claude Code status**: one card per Claude Code session: working, waiting for you, finished.
+- **Todoist**: the current task (today and overdue, by priority then time); expand for the rest of today with checkboxes.
 - **Privacy**: which apps use the microphone, screen sharing or recording (with a stop button), and the camera on GNOME 47+.
 
 ## Requirements
@@ -92,6 +93,12 @@ The installer keeps your other hooks, honors `CLAUDE_CONFIG_DIR`, and saves the 
 
 Only sessions running on the same desktop session as the island can reach it.
 
+### Todoist
+
+Paste a personal API token (Todoist: Settings, Integrations, Developer) in the preferences window and press apply. The token is stored in dconf as plain text, readable by any process running as you.
+
+The current task is the first of `today | overdue` ordered by priority, then timed tasks by time, then due date, then Todoist's own order. Tasks refresh every 5 minutes; `island todoist refresh` forces it, `island todoist complete --id <task id>` completes one. Checking a task removes it at once and puts it back if Todoist rejects the change.
+
 ### D-Bus API
 
 The CLI is a thin client over `io.github.claudiojunior_me.LinuxIsland` at `/io/github/claudiojunior_me/LinuxIsland`:
@@ -124,12 +131,17 @@ src/shell/                   GNOME Shell only
   island.js                  Pill and bubble: positioning, expand/collapse, resize animation
   control-bus.js             Publishes IslandControl on the session bus
   progress-bar.js            Progress bar shared by plugin views
+  http.js                    Async HTTP client for plugins that call web APIs
 prefs.js                     Preferences window, driven by the settings schema
 schemas/                     GSettings schema
 src/plugins/
   catalog.js                 Plugins the island loads
   activities/plugin.js       Live activities (pure)
   activities/shell.js        Live activity views
+  todoist/api.js             Todoist API v1 calls over an injected HTTP function (pure)
+  todoist/tasks.js           Task shape, ordering and due labels (pure)
+  todoist/plugin.js          Current task, completion and refresh (pure)
+  todoist/shell.js           Token setting and views
   privacy/plugin.js          Microphone, screen and camera use (pure)
   privacy/shell.js           Sensors (mixer, remote access controller, camera monitor) and views
   pomodoro/timer.js          Pomodoro state machine (pure)
@@ -169,6 +181,8 @@ Register both in `src/plugins/catalog.js`.
 npm test            # unit + integration, runs anywhere with Node
 npm run test:e2e    # needs gnome-shell installed; starts a headless shell
 ```
+
+Tests that talk to Todoist run only with `TODOIST_API_TOKEN` set and report as skipped otherwise. They create a task due today in that account, complete it, and delete it.
 
 The end-to-end suite runs GNOME Shell headless with throwaway `XDG_*` directories and a private session bus, installs the extension there, drives it over D-Bus and checks the actor on screen. It leaves a screenshot in `tests/e2e/output/island-running.png`.
 
