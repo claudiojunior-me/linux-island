@@ -4,8 +4,11 @@ import {LiveActivitiesPlugin} from './activities/plugin.js';
 import {createActivitiesShell} from './activities/shell.js';
 import {PomodoroPlugin} from './pomodoro/plugin.js';
 import {createPomodoroShell} from './pomodoro/shell.js';
+import {PrivacyPlugin} from './privacy/plugin.js';
+import {createPrivacyShell} from './privacy/shell.js';
 
 export const PLUGIN_CATALOG = [
     {create: () => new PomodoroPlugin(), createShell: createPomodoroShell},
     {create: () => new LiveActivitiesPlugin(), createShell: createActivitiesShell},
+    {create: () => new PrivacyPlugin(), createShell: createPrivacyShell},
 ];
