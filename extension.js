@@ -14,10 +14,11 @@ export default class LinuxIslandExtension extends Extension {
     enable() {
         this._registry = new PluginRegistry();
         this._shells = new Map();
+        const context = {settings: this.getSettings()};
         for (const entry of PLUGIN_CATALOG) {
             const plugin = entry.create();
             this._registry.register(plugin);
-            this._shells.set(plugin.id, entry.createShell(plugin));
+            this._shells.set(plugin.id, entry.createShell(plugin, context));
         }
 
         this._island = new Island(this._registry, this._shells);

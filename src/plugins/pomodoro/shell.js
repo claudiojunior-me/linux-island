@@ -6,6 +6,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {verticalBox} from '../../shell/box.js';
+import {timerOptionsFromSettings} from './settings.js';
 import {Phase} from './timer.js';
 
 const PHASE_LABELS = {
@@ -51,7 +52,11 @@ class ProgressBar {
     }
 }
 
-export function createPomodoroShell(plugin) {
+export function createPomodoroShell(plugin, {settings}) {
+    plugin.configure(timerOptionsFromSettings(settings));
+    const settingsChangedId = settings.connect('changed',
+        () => plugin.configure(timerOptionsFromSettings(settings)));
+
     const compact = verticalBox({style_class: 'pomodoro-compact'});
     const compactRow = new St.BoxLayout({style_class: 'pomodoro-compact-row'});
     const phaseDot = new St.Widget({style_class: 'pomodoro-phase-dot', y_align: Clutter.ActorAlign.CENTER});
@@ -99,6 +104,7 @@ export function createPomodoroShell(plugin) {
                 : 'media-playback-start-symbolic';
         },
         destroy() {
+            settings.disconnect(settingsChangedId);
             unsubscribe();
             compact.destroy();
             expanded.destroy();

@@ -28,6 +28,7 @@ chmod 700 "$XDG_RUNTIME_DIR"
 
 "$ROOT/scripts/install.sh" >/dev/null
 
+export E2E_SCHEMA_DIR="$XDG_DATA_HOME/gnome-shell/extensions/$UUID/schemas"
 export E2E_SCREENSHOT_DIR="$ROOT/tests/e2e/output"
 mkdir -p "$E2E_SCREENSHOT_DIR"
 

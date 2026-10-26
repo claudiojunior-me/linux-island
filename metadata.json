@@ -3,5 +3,6 @@
   "name": "Linux Island",
   "description": "A Dynamic Island for GNOME: a pill below the top bar that shows live plugins, starting with a pomodoro timer.",
   "shell-version": ["46", "47", "48", "49", "50"],
+  "settings-schema": "org.gnome.shell.extensions.linux-island",
   "url": "https://github.com/claudiojunior-me/linux-island"
 }

@@ -7,6 +7,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import path from 'node:path';
 
 const BUS_NAME = 'io.github.claudiojunior_me.LinuxIsland';
+const SETTINGS_SCHEMA = 'org.gnome.shell.extensions.linux-island';
 const OBJECT_PATH = '/io/github/claudiojunior_me/LinuxIsland';
 
 function gdbusCall(dest, objectPath, method, ...args) {
@@ -28,6 +29,19 @@ function shellEval(code) {
     const [, ok, result] = output.match(/^\((true|false), '(.*)'\)$/s);
     assert.equal(ok, 'true', `Eval failed: ${result}`);
     return JSON.parse(result);
+}
+
+function setSetting(key, value) {
+    execFileSync('gsettings', ['--schemadir', process.env.E2E_SCHEMA_DIR, 'set', SETTINGS_SCHEMA, key, value]);
+}
+
+async function waitFor(check, description) {
+    for (let attempt = 0; attempt < 40; attempt++) {
+        if (check())
+            return;
+        await sleep(100);
+    }
+    throw new Error(`timed out waiting for ${description}`);
 }
 
 before(async () => {
@@ -108,4 +122,12 @@ test('island shows the running countdown', async () => {
 test('unknown plugins and actions return D-Bus errors', () => {
     assert.throws(() => island('GetState', 'nope'), /unknown plugin: nope/);
     assert.throws(() => island('Activate', 'pomodoro', 'explode'), /unknown pomodoro action: explode/);
+});
+
+test('changing the work duration setting updates the idle countdown', async () => {
+    setSetting('pomodoro-work-minutes', '1');
+    await waitFor(() => state().countdown === '01:00', 'countdown 01:00');
+
+    setSetting('pomodoro-work-minutes', '25');
+    await waitFor(() => state().countdown === '25:00', 'countdown 25:00');
 });

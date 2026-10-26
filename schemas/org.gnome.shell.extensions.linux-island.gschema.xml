@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ABOUTME: Settings schema for the Linux Island GNOME Shell extension. -->
+<!-- ABOUTME: Keys are prefixed with the plugin that reads them. -->
+<schemalist>
+  <schema id="org.gnome.shell.extensions.linux-island" path="/org/gnome/shell/extensions/linux-island/">
+    <key name="pomodoro-work-minutes" type="i">
+      <range min="1" max="180"/>
+      <default>25</default>
+      <summary>Focus session length in minutes</summary>
+    </key>
+    <key name="pomodoro-short-break-minutes" type="i">
+      <range min="1" max="60"/>
+      <default>5</default>
+      <summary>Short break length in minutes</summary>
+    </key>
+    <key name="pomodoro-long-break-minutes" type="i">
+      <range min="1" max="120"/>
+      <default>15</default>
+      <summary>Long break length in minutes</summary>
+    </key>
+    <key name="pomodoro-sessions-before-long-break" type="i">
+      <range min="1" max="12"/>
+      <default>4</default>
+      <summary>Focus sessions before a long break</summary>
+    </key>
+  </schema>
+</schemalist>

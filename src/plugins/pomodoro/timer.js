@@ -18,19 +18,28 @@ const DEFAULTS = Object.freeze({
 
 export class PomodoroTimer {
     constructor(options = {}) {
-        const settings = {...DEFAULTS, ...options};
+        this._settings = {...DEFAULTS};
+        this.configure(options);
+        this.reset();
+    }
+
+    // Changes durations; an untouched phase picks them up at once, a started one keeps its length.
+    configure(options) {
+        const settings = {...this._settings, ...options};
         for (const [name, value] of Object.entries(settings)) {
             if (!(value > 0))
                 throw new RangeError(`${name} must be positive, got ${value}`);
         }
 
+        this._settings = settings;
         this._durations = {
             [Phase.WORK]: settings.workMinutes * MINUTE_MS,
             [Phase.SHORT_BREAK]: settings.shortBreakMinutes * MINUTE_MS,
             [Phase.LONG_BREAK]: settings.longBreakMinutes * MINUTE_MS,
         };
         this._sessionsBeforeLongBreak = settings.sessionsBeforeLongBreak;
-        this.reset();
+        if (this._phase !== undefined && this._startedAt === null && this._elapsedBeforeStart === 0)
+            this._phaseTotal = this._durations[this._phase];
     }
 
     start(now) {
@@ -72,13 +81,14 @@ export class PomodoroTimer {
             phase: this._phase,
             running: this._startedAt !== null,
             remainingMs: this._remaining(now),
-            totalMs: this._durations[this._phase],
+            totalMs: this._phaseTotal,
             completedWorkSessions: this._completedWorkSessions,
         };
     }
 
     _enterPhase(phase) {
         this._phase = phase;
+        this._phaseTotal = this._durations[phase];
         this._startedAt = null;
         this._elapsedBeforeStart = 0;
     }
@@ -94,6 +104,6 @@ export class PomodoroTimer {
     _remaining(now) {
         const running = this._startedAt === null ? 0 : now - this._startedAt;
         const elapsed = this._elapsedBeforeStart + Math.max(0, running);
-        return Math.max(0, this._durations[this._phase] - elapsed);
+        return Math.max(0, this._phaseTotal - elapsed);
     }
 }

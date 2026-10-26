@@ -9,5 +9,6 @@ TARGET="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/$UUID"
 
 rm -rf "$TARGET"
 mkdir -p "$TARGET"
-cp -r "$ROOT/metadata.json" "$ROOT/extension.js" "$ROOT/stylesheet.css" "$ROOT/src" "$TARGET/"
+cp -r "$ROOT/metadata.json" "$ROOT/extension.js" "$ROOT/prefs.js" "$ROOT/stylesheet.css" "$ROOT/src" "$ROOT/schemas" "$TARGET/"
+glib-compile-schemas "$TARGET/schemas"
 echo "Installed $UUID into $TARGET"

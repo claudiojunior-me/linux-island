@@ -32,6 +32,7 @@ dbus-run-session gnome-shell --nested --wayland
 - Click the pill to expand or collapse it.
 - Expanded pomodoro: reset, start/pause, skip phase.
 - A notification and sound mark the end of each phase. Phases do not auto-start; press start when ready.
+- Durations live in the preferences window: `gnome-extensions prefs linux-island@claudiojunior-me.github.io`. A phase already in progress keeps its length; changes apply from the next phase.
 
 ### Control from scripts and keybindings
 
@@ -63,10 +64,13 @@ src/shell/                   GNOME Shell only
   box.js                     Vertical box that works on every supported shell version
   island.js                  The pill: positioning, compact/expanded switch, resize animation
   control-bus.js             Publishes IslandControl on the session bus
+prefs.js                     Preferences window, driven by the settings schema
+schemas/                     GSettings schema
 src/plugins/
   catalog.js                 Plugins the island loads
   pomodoro/timer.js          Pomodoro state machine (pure)
   pomodoro/plugin.js         Plugin contract implementation (pure)
+  pomodoro/settings.js       Settings keys for the pomodoro durations
   pomodoro/shell.js          Pomodoro views and alerts (GNOME Shell)
 ```
 
@@ -90,7 +94,7 @@ Pure part (`src/plugins/<name>/plugin.js`):
 | `tick()` | Optional, called once a second |
 | `destroy()` | Releases resources |
 
-Shell part (`src/plugins/<name>/shell.js`) exports a factory returning `{compact, expanded, update(state), destroy()}`, where `compact` and `expanded` are St actors.
+Shell part (`src/plugins/<name>/shell.js`) exports a factory `(plugin, {settings})` returning `{compact, expanded, update(state), destroy()}`, where `compact` and `expanded` are St actors.
 
 Register both in `src/plugins/catalog.js`.
 
