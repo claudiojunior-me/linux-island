@@ -1,10 +1,11 @@
 // ABOUTME: Keeps the island's plugins and picks which one the island shows.
 // ABOUTME: Plugins need an id, a numeric priority, hasActivity() and handleAction(action).
+import {Listeners} from './listeners.js';
 
 export class PluginRegistry {
     constructor() {
         this._plugins = new Map();
-        this._listeners = new Set();
+        this._listeners = new Listeners();
     }
 
     register(plugin) {
@@ -44,12 +45,10 @@ export class PluginRegistry {
     }
 
     subscribe(listener) {
-        this._listeners.add(listener);
-        return () => this._listeners.delete(listener);
+        return this._listeners.add(listener);
     }
 
     _notify() {
-        for (const listener of this._listeners)
-            listener();
+        this._listeners.emit();
     }
 }
