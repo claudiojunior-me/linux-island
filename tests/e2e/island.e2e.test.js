@@ -25,9 +25,13 @@ const cli = (...args) => execFileSync(ISLAND_CLI, args, {encoding: 'utf8', stdio
 
 const state = (pluginId = 'pomodoro') => JSON.parse(parseGdbusString(island('GetState', pluginId)));
 
+// Lets evaluated code find an actor by name anywhere below a root.
+const EVAL_HELPERS = `const deepFind = (root, name) => root.name === name
+    ? root : root.get_children().reduce((found, child) => found ?? deepFind(child, name), null);`;
+
 // Runs JavaScript inside the shell; needs gnome-shell --unsafe-mode.
 function shellEval(code) {
-    const output = gdbusCall('org.gnome.Shell', '/org/gnome/Shell', 'org.gnome.Shell.Eval', code);
+    const output = gdbusCall('org.gnome.Shell', '/org/gnome/Shell', 'org.gnome.Shell.Eval', `${EVAL_HELPERS}\n${code}`);
     assert.ok(output.startsWith('(true,'), `Eval failed: ${output}`);
     return JSON.parse(parseGdbusString(output));
 }
@@ -181,17 +185,17 @@ test('the Claude Code hook mirrors a session on the island', async () => {
 const clickIslandPart = name => shellEval(`(() => {
     const name = ${JSON.stringify(name)};
     const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
-    const pill = group.get_children().find(a => a.name === 'linux-island-pill');
+    const pill = deepFind(group, 'linux-island-pill');
     const part = name === 'header'
         ? pill.get_children().find(a => a.has_style_class_name('island-header'))
-        : group.get_children().find(a => a.name === name);
+        : deepFind(group, name);
     part.emit('clicked', 1);
     return true;
 })()`);
 
 const bubbleState = () => shellEval(`(() => {
     const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
-    const bubble = group.get_children().find(a => a.name === 'linux-island-bubble');
+    const bubble = deepFind(group, 'linux-island-bubble');
     const texts = [];
     const walk = actor => {
         if (actor.text !== undefined && actor.text !== null) texts.push(actor.text);
@@ -327,7 +331,7 @@ async function movePointer(where) {
     for (let attempt = 0; attempt < 2; attempt++) {
         shellEval(`(() => {
             const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
-            const pill = group.get_children().find(a => a.name === 'linux-island-pill');
+            const pill = deepFind(group, 'linux-island-pill');
             const [pillX, pillY] = pill.get_transformed_position();
             const [x, y] = ${where === 'pill' ? '[pillX + pill.width / 2, pillY + pill.height / 2]' : '[40, global.stage.height - 40]'};
             ${virtualPointer}.notify_absolute_motion(imports.gi.GLib.get_monotonic_time(), x, y);
@@ -445,7 +449,7 @@ const pageDots = name => shellEval(`(() => {
 // Cards finish their slide fully visible and back in place, and the pill ends at its natural size.
 const pillSettled = () => shellEval(`(() => {
     const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
-    const pill = group.get_children().find(a => a.name === 'linux-island-pill');
+    const pill = deepFind(group, 'linux-island-pill');
     const [, naturalHeight] = pill.get_preferred_height(-1);
     return pill.get_children().every(part => part.opacity === 255 && part.translation_x === 0) &&
         Math.round(pill.height) === Math.round(naturalHeight);
@@ -524,39 +528,30 @@ test('the pill, the bubble and the page dots are frosted glass', async () => {
         await sleep(400);
         const glass = shellEval(`(() => {
             const names = ['linux-island-pill', 'linux-island-bubble', 'linux-island-peek-dots'];
-            const actors = {};
-            const walk = actor => {
-                actors[actor.name] = actor;
-                actor.get_children().forEach(walk);
-            };
-            walk(Main.layoutManager.uiGroup);
             return Object.fromEntries(names.map(name => {
-                const surface = actors[name];
-                const backdrop = actors[name + '-glass'];
-                if (!backdrop) return [name, null];
-                const [x, y] = surface.get_transformed_position();
+                const surface = deepFind(Main.layoutManager.uiGroup, name);
+                const frame = surface.get_parent();
+                const backdrop = frame.get_first_child();
+                const scene = backdrop.get_first_child();
                 return [name, {
+                    backdrop: backdrop.name,
                     effects: backdrop.get_effects().map(effect => effect.name),
-                    blursTheScene: backdrop.get_first_child()?.source === global.window_group,
-                    followsSurface: backdrop.visible === surface.mapped && (!surface.mapped ||
-                        (Math.round(backdrop.x) === Math.round(x) && Math.round(backdrop.y) === Math.round(y) &&
-                         Math.round(backdrop.width) === Math.round(surface.width) &&
-                         Math.round(backdrop.height) === Math.round(surface.height))),
-                    belowSurface: (() => {
-                        let root = surface;
-                        while (root.get_parent() !== Main.layoutManager.uiGroup) root = root.get_parent();
-                        const layers = Main.layoutManager.uiGroup.get_children();
-                        return layers.indexOf(backdrop) < layers.indexOf(root);
-                    })(),
+                    copiesTheScene: scene.source === global.window_group,
+                    sceneAtStageOrigin: scene.x === 0 && scene.y === 0,
+                    sameSizeAsSurface: !surface.mapped || Math.round(backdrop.width) === Math.round(surface.width) &&
+                        Math.round(backdrop.height) === Math.round(surface.height),
+                    shownWithSurface: frame.visible === surface.visible,
                 }];
             }));
         })()`);
         for (const name of ['linux-island-pill', 'linux-island-bubble', 'linux-island-peek-dots']) {
             assert.deepEqual(glass[name], {
+                backdrop: `${name}-glass`,
                 effects: ['island-glass-corners', 'island-glass-blur'],
-                blursTheScene: true,
-                followsSurface: true,
-                belowSurface: true,
+                copiesTheScene: true,
+                sceneAtStageOrigin: true,
+                sameSizeAsSurface: true,
+                shownWithSurface: true,
             }, name);
         }
         screenshot('island-glass.png');

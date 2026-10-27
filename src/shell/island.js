@@ -10,7 +10,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {CardDeck} from '../core/card-deck.js';
 import {ScrollSteps} from '../core/scroll-steps.js';
 import {verticalBox} from './box.js';
-import {makeGlass} from './glass.js';
+import {frameInGlass} from './glass.js';
 import {PageDots} from './page-dots.js';
 
 const GAP_BELOW_PANEL = 6;
@@ -90,8 +90,8 @@ export class Island {
         this._pill.add_child(this._header);
         this._pill.add_child(this._expandedBin);
         this._pill.add_child(this._footer);
-        this.actor.add_child(this._pill);
-        this.actor.add_child(this._bubble);
+        this.actor.add_child(frameInGlass(this._pill));
+        this.actor.add_child(frameInGlass(this._bubble));
         // What slides when the user pages from one card to the next.
         this._cardParts = [this._title, this._header, this._expandedBin];
 
@@ -119,8 +119,8 @@ export class Island {
 
         Main.layoutManager.addTopChrome(this.actor, {trackFullscreen: true});
         // Left out of the chrome so the dots stay outside the input region.
-        Main.layoutManager.uiGroup.add_child(this._peekDots.actor);
-        [this._pill, this._bubble, this._peekDots.actor].forEach(makeGlass);
+        this._peekDotsFrame = frameInGlass(this._peekDots.actor);
+        Main.layoutManager.uiGroup.add_child(this._peekDotsFrame);
         this._sync();
     }
 
@@ -133,7 +133,7 @@ export class Island {
         this._header.set_child(null);
         this._expandedBin.set_child(null);
         this._bubble.set_child(null);
-        this._peekDots.actor.destroy();
+        this._peekDotsFrame.destroy();
         Main.layoutManager.removeChrome(this.actor);
         this.actor.destroy();
     }
@@ -424,7 +424,7 @@ export class Island {
         this.actor.set_position(
             Math.round(monitor.x + (monitor.width - this.actor.width) / 2),
             panelBox.y + panelBox.height + GAP_BELOW_PANEL);
-        this._peekDots.actor.set_position(
+        this._peekDotsFrame.set_position(
             Math.round(this.actor.x + (this._pill.width - this._peekDots.actor.width) / 2),
             this.actor.y + this._pill.height + PEEK_DOTS_GAP);
     }
