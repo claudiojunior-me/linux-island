@@ -130,3 +130,23 @@ test('configure changes the countdown shown while idle', () => {
     assert.equal(JSON.parse(control.GetState('pomodoro')).countdown, '01:00');
     assert.deepEqual(events, [{type: 'changed'}]);
 });
+
+test('Send passes a JSON payload to the plugin action', () => {
+    const {registry, control} = setup();
+    const received = [];
+    registry.register({
+        id: 'probe',
+        priority: 0,
+        hasActivity: () => false,
+        handleAction: (action, payload) => received.push([action, payload]),
+        getState: () => ({}),
+    });
+    control.Send('probe', 'push', '{"id":"a","title":"A"}');
+    assert.deepEqual(received, [['push', {id: 'a', title: 'A'}]]);
+});
+
+test('Send rejects payloads that are not JSON objects', () => {
+    const {control} = setup();
+    assert.throws(() => control.Send('pomodoro', 'toggle', 'not json'), /payload must be a JSON object/);
+    assert.throws(() => control.Send('pomodoro', 'toggle', '[1]'), /payload must be a JSON object/);
+});

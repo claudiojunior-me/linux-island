@@ -39,13 +39,13 @@
     font-feature-settings: "tnum";
 }
 
-.pomodoro-progress-track {
+.island-progress-track {
     height: 3px;
     border-radius: 2px;
     background-color: rgba(255, 255, 255, 0.15);
 }
 
-.pomodoro-progress-fill {
+.island-progress-fill {
     height: 3px;
     border-radius: 2px;
     background-color: #ff6b5b;
@@ -53,8 +53,8 @@
 
 .pomodoro-phase-dot.short-break,
 .pomodoro-phase-dot.long-break,
-.pomodoro-progress-fill.short-break,
-.pomodoro-progress-fill.long-break {
+.island-progress-fill.short-break,
+.island-progress-fill.long-break {
     background-color: #4cd47b;
 }
 
@@ -95,4 +95,101 @@
 
 .pomodoro-control-icon {
     icon-size: 16px;
+}
+
+.island-progress-fill.normal {
+    background-color: #6ea8ff;
+}
+
+.island-progress-fill.attention {
+    background-color: #ffb340;
+}
+
+.island-progress-fill.success {
+    background-color: #4cd47b;
+}
+
+.island-progress-fill.error {
+    background-color: #ff5b5b;
+}
+
+.activity-compact {
+    spacing: 4px;
+}
+
+.activity-compact-row,
+.activity-row {
+    spacing: 8px;
+}
+
+.activity-list {
+    spacing: 10px;
+    min-width: 280px;
+}
+
+.activity-text {
+    spacing: 2px;
+}
+
+.activity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background-color: #6ea8ff;
+}
+
+.activity-icon {
+    icon-size: 16px;
+    color: #6ea8ff;
+}
+
+.activity-dot.attention {
+    background-color: #ffb340;
+}
+
+.activity-icon.attention {
+    color: #ffb340;
+}
+
+.activity-dot.success {
+    background-color: #4cd47b;
+}
+
+.activity-icon.success {
+    color: #4cd47b;
+}
+
+.activity-dot.error {
+    background-color: #ff5b5b;
+}
+
+.activity-icon.error {
+    color: #ff5b5b;
+}
+
+.activity-title {
+    font-weight: bold;
+}
+
+.activity-subtitle {
+    font-size: 9pt;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.activity-more {
+    font-size: 9pt;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.activity-dismiss {
+    border-radius: 99px;
+    padding: 4px;
+}
+
+.activity-dismiss:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+.activity-dismiss-icon {
+    icon-size: 12px;
 }

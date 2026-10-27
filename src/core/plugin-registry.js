@@ -1,5 +1,5 @@
 // ABOUTME: Keeps the island's plugins and picks which one the island shows.
-// ABOUTME: Plugins need an id, a numeric priority, hasActivity() and handleAction(action).
+// ABOUTME: Plugins need an id, a numeric priority, hasActivity() and handleAction(action, payload).
 import {Listeners} from './listeners.js';
 
 export class PluginRegistry {
@@ -37,11 +37,11 @@ export class PluginRegistry {
         return active.reduce((best, plugin) => plugin.priority > best.priority ? plugin : best);
     }
 
-    dispatch(id, action) {
+    dispatch(id, action, payload) {
         const plugin = this._plugins.get(id);
         if (!plugin)
             throw new Error(`unknown plugin: ${id}`);
-        plugin.handleAction(action);
+        plugin.handleAction(action, payload);
     }
 
     subscribe(listener) {
