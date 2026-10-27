@@ -22,9 +22,20 @@ scripts/install.sh
 gnome-extensions enable linux-island@claudiojunior-me.github.io
 ```
 
-On Wayland, GNOME Shell only picks up a newly installed extension after you log out and back in. After that, re-running `scripts/install.sh` followed by `gnome-extensions disable`/`enable` is enough for most changes.
+On Wayland, GNOME Shell only picks up a newly installed extension after you log out and back in.
 
-To try it without touching your session, run a nested shell:
+`scripts/install.sh` copies the checkout, so re-run it after every change. What else a change needs depends on the file:
+
+| Changed | To see it |
+| --- | --- |
+| `prefs.js` | Reopen the settings window |
+| `stylesheet.css` | `gnome-extensions disable`/`enable` |
+| `schemas/` | Nothing more; `install.sh` recompiles them |
+| `extension.js`, `src/` | Log out and back in, or use a nested shell |
+
+GNOME Shell caches imported modules for the whole session, so `disable`/`enable` keeps running the JavaScript it loaded first.
+
+To try it without touching your session, run `scripts/dev.sh`. It installs the extension and starts a nested shell, which imports every module fresh; close its window and run it again after each change. Log output goes to the terminal. The nested shell is:
 
 ```sh
 # GNOME 49 and later
@@ -136,7 +147,7 @@ src/core/                    Pure JavaScript, no GNOME imports, runs in Node tes
   clock-format.js            MM:SS countdown text
 bin/island                   Command line client
 bin/claude-code-hook         Claude Code hook that feeds live activities
-scripts/                     Installers for the extension and the Claude Code hooks
+scripts/                     Installers for the extension and the Claude Code hooks, and the nested-shell dev loop
 src/cli/                     Command line parsing and the gdbus client
 src/integrations/claude-code/  Hook event mapping and settings.json editing (pure)
 src/shell/                   GNOME Shell only
