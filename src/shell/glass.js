@@ -91,8 +91,8 @@ class GlassBackdrop extends Clutter.Actor {
     }
 });
 
-// Puts an St widget on frosted glass. Returns the frame to place where the widget would go: it holds the glass
-// below the widget, sized with it, and shows, hides and fades along with it.
+// Puts an St widget on frosted glass. Returns {frame, glass}: the frame goes where the widget would go and holds
+// the glass below the widget, sized with it, showing, hiding and fading along with it; hide the glass to drop it.
 export function frameInGlass(widget) {
     // The frame takes the widget's place in its parent's layout, so it takes the widget's alignment too.
     const frame = new Clutter.Actor({
@@ -108,5 +108,5 @@ export function frameInGlass(widget) {
     frame.add_child(widget);
     widget.bind_property('visible', frame, 'visible', GObject.BindingFlags.SYNC_CREATE);
     widget.bind_property('opacity', backdrop, 'opacity', GObject.BindingFlags.SYNC_CREATE);
-    return frame;
+    return {frame, glass: backdrop};
 }

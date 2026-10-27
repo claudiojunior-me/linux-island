@@ -8,6 +8,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {CardDeck} from '../core/card-deck.js';
+import {IN_TOP_BAR_SETTING} from '../core/island-settings.js';
 import {ScrollSteps} from '../core/scroll-steps.js';
 import {verticalBox} from './box.js';
 import {frameInGlass} from './glass.js';
@@ -39,12 +40,26 @@ function grabHoldsKeyboard(grab) {
     return !grab.is_revoked();
 }
 
+// Stage position from the allocations of the actor and its ancestors. Asking Clutter for the transformed
+// position from a layout notification makes it lay the stage out again, inside the layout pass.
+function stagePosition(actor) {
+    let [x, y] = [0, 0];
+    for (let current = actor; current && current !== global.stage; current = current.get_parent()) {
+        x += current.x + current.translation_x;
+        y += current.y + current.translation_y;
+    }
+    return [x, y];
+}
+
 export class Island {
     // `shells` maps each plugin id to its shell part: {compact, expanded, minimal, update(state), destroy()}.
     // Plugins may come and go while the island is up; openSettings opens the preferences window.
     // cardOrder lists plugin ids in the order scrolling and the arrow keys page through them.
-    constructor(registry, shells, {openSettings, cardOrder}) {
+    // settings tells whether the island sits in the top bar or floats below it.
+    constructor(registry, shells, {openSettings, cardOrder, settings}) {
         this._registry = registry;
+        this._settings = settings;
+        this._panelSlot = null;
         this._shells = shells;
         this._deck = new CardDeck(registry, cardOrder);
         this._scrollSteps = new ScrollSteps();
@@ -62,7 +77,7 @@ export class Island {
 
         this.actor = new St.BoxLayout({name: 'linux-island', style_class: 'island-group'});
         this._pill = verticalBox({
-            name: 'linux-island-pill', style_class: 'island', reactive: true, clip_to_allocation: true,
+            name: 'linux-island-pill', style_class: 'island', reactive: true, track_hover: true, clip_to_allocation: true,
         });
         this._title = new St.Label({name: 'linux-island-card-title', style_class: 'island-card-title', visible: false});
         this._header = new St.Button({style_class: 'island-header', x_expand: true});
@@ -90,8 +105,11 @@ export class Island {
         this._pill.add_child(this._header);
         this._pill.add_child(this._expandedBin);
         this._pill.add_child(this._footer);
-        this.actor.add_child(frameInGlass(this._pill));
-        this.actor.add_child(frameInGlass(this._bubble));
+        const pillGlass = frameInGlass(this._pill);
+        const bubbleGlass = frameInGlass(this._bubble);
+        this.actor.add_child(pillGlass.frame);
+        this.actor.add_child(bubbleGlass.frame);
+        this._chipGlass = [pillGlass.glass, bubbleGlass.glass];
         // What slides when the user pages from one card to the next.
         this._cardParts = [this._title, this._header, this._expandedBin];
 
@@ -119,8 +137,12 @@ export class Island {
 
         Main.layoutManager.addTopChrome(this.actor, {trackFullscreen: true});
         // Left out of the chrome so the dots stay outside the input region.
-        this._peekDotsFrame = frameInGlass(this._peekDots.actor);
+        this._peekDotsFrame = frameInGlass(this._peekDots.actor).frame;
         Main.layoutManager.uiGroup.add_child(this._peekDotsFrame);
+
+        const placementId = settings.connect(`changed::${IN_TOP_BAR_SETTING}`, () => this._applyPlacement());
+        this._disconnects.push(() => settings.disconnect(placementId));
+        this._applyPlacement();
         this._sync();
     }
 
@@ -134,6 +156,7 @@ export class Island {
         this._expandedBin.set_child(null);
         this._bubble.set_child(null);
         this._peekDotsFrame.destroy();
+        this._panelSlot?.destroy();
         Main.layoutManager.removeChrome(this.actor);
         this.actor.destroy();
     }
@@ -170,7 +193,36 @@ export class Island {
             this._takeKeyboard();
         else
             this._releaseKeyboard();
+        this._showAsChip();
         this._sync();
+        this._reposition();
+    }
+
+    // In the top bar, a slot after the clock keeps room for the collapsed island so the bar's items move aside.
+    _applyPlacement() {
+        const inTopBar = this._settings.get_boolean(IN_TOP_BAR_SETTING);
+        if (inTopBar && !this._panelSlot) {
+            this._panelSlot = new St.Widget({name: 'linux-island-panel-slot'});
+            Main.panel._centerBox.insert_child_above(this._panelSlot, Main.panel.statusArea.dateMenu.container);
+            this._panelSlot.connect('notify::allocation', () => this._reposition());
+        } else if (!inTopBar && this._panelSlot) {
+            this._panelSlot.destroy();
+            this._panelSlot = null;
+        }
+        this._showAsChip();
+        this._reposition();
+    }
+
+    // Collapsed in the top bar, the island looks like the bar's other items: no glass, no border.
+    _showAsChip() {
+        const chip = this._panelSlot !== null && !this._expanded;
+        for (const surface of [this._pill, this._bubble]) {
+            if (chip)
+                surface.add_style_pseudo_class('in-top-bar');
+            else
+                surface.remove_style_pseudo_class('in-top-bar');
+        }
+        this._chipGlass.forEach(glass => (glass.visible = !chip));
     }
 
     _takeKeyboard() {
@@ -412,7 +464,10 @@ export class Island {
             duration: RESIZE_DURATION_MS,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             // Hands sizing back to the layout so later content changes still resize the pill.
-            onComplete: () => this._pill.set_size(-1, -1),
+            onComplete: () => {
+                this._pill.set_size(-1, -1);
+                this._reposition();
+            },
         });
     }
 
@@ -421,11 +476,26 @@ export class Island {
         if (!monitor)
             return;
         const panelBox = Main.layoutManager.panelBox;
-        this.actor.set_position(
-            Math.round(monitor.x + (monitor.width - this.actor.width) / 2),
-            panelBox.y + panelBox.height + GAP_BELOW_PANEL);
+        const panelBottom = panelBox.y + panelBox.height;
+        let x = monitor.x + (monitor.width - this.actor.width) / 2;
+        let y = panelBottom + GAP_BELOW_PANEL;
+        if (this._panelSlot) {
+            const [slotX] = stagePosition(this._panelSlot);
+            if (this._expanded) {
+                // The card drops below the bar, centered on the slot and kept on the monitor.
+                const centered = slotX + (this._panelSlot.width - this.actor.width) / 2;
+                x = Math.min(Math.max(centered, monitor.x), monitor.x + monitor.width - this.actor.width);
+            } else {
+                // The slot follows the collapsed size once the pill stops resizing.
+                if (!this._pill.get_transition('width'))
+                    this._panelSlot.set_width(this.actor.width);
+                x = slotX;
+                y = panelBox.y + Math.max(0, (panelBox.height - this.actor.height) / 2);
+            }
+        }
+        this.actor.set_position(Math.round(x), Math.round(y));
         this._peekDotsFrame.set_position(
             Math.round(this.actor.x + (this._pill.width - this._peekDots.actor.width) / 2),
-            this.actor.y + this._pill.height + PEEK_DOTS_GAP);
+            Math.max(this.actor.y + this._pill.height, panelBottom) + PEEK_DOTS_GAP);
     }
 }

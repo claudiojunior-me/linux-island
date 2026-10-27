@@ -83,22 +83,79 @@ test('exposes the plugins with pomodoro as foreground', () => {
     assert.equal(cli('foreground'), 'pomodoro');
 });
 
-test('island is on screen, centered below the top bar', () => {
-    const geometry = shellEval(`(() => {
-        const actor = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
-        const [x, y] = actor.get_transformed_position();
-        return {
-            visible: actor.visible && actor.mapped,
-            x, y, width: actor.width,
-            monitorWidth: Main.layoutManager.primaryMonitor.width,
-            panelBottom: Main.layoutManager.panelBox.y + Main.layoutManager.panelBox.height,
-        };
-    })()`);
+// Where the island and the top bar are on screen, and the slot the bar keeps for the island.
+const placement = () => shellEval(`(() => {
+    const actor = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+    const pill = deepFind(actor, 'linux-island-pill');
+    const slot = deepFind(Main.panel, 'linux-island-panel-slot');
+    const centerItems = Main.panel._centerBox.get_children();
+    const [x, y] = actor.get_transformed_position();
+    const [pillX, pillY] = pill.get_transformed_position();
+    const [slotX] = slot ? slot.get_transformed_position() : [null];
+    return {
+        visible: actor.visible && actor.mapped,
+        x, y, width: actor.width, height: actor.height,
+        pillY, pillHeight: pill.height,
+        monitorWidth: Main.layoutManager.primaryMonitor.width,
+        panelTop: Main.layoutManager.panelBox.y,
+        panelBottom: Main.layoutManager.panelBox.y + Main.layoutManager.panelBox.height,
+        slot: slot ? {x: slotX, width: slot.width,
+            afterClock: centerItems.indexOf(slot) === centerItems.indexOf(Main.panel.statusArea.dateMenu.container) + 1,
+        } : null,
+        chip: pill.has_style_pseudo_class('in-top-bar'),
+        glassShown: deepFind(actor, 'linux-island-pill-glass').visible,
+    };
+})()`);
 
-    assert.equal(geometry.visible, true);
-    assert.ok(geometry.y >= geometry.panelBottom, 'island overlaps the top bar');
-    const center = geometry.x + geometry.width / 2;
-    assert.ok(Math.abs(center - geometry.monitorWidth / 2) <= 1, `island not centered: ${center}`);
+test('by default the collapsed island sits in the top bar right after the clock', async () => {
+    await waitFor(() => placement().slot?.afterClock, 'slot after the clock');
+    await waitFor(() => {
+        const {x, slot} = placement();
+        return Math.abs(x - slot.x) <= 1;
+    }, 'island over its slot');
+    const where = placement();
+    assert.equal(where.visible, true);
+    assert.equal(where.chip, true);
+    assert.equal(where.glassShown, false);
+    assert.ok(where.y >= where.panelTop && where.y + where.height <= where.panelBottom,
+        `island not inside the top bar: ${JSON.stringify(where)}`);
+    assert.ok(Math.abs(where.slot.width - where.width) <= 1, `slot does not fit the island: ${JSON.stringify(where)}`);
+    screenshot('island-in-top-bar.png');
+});
+
+test('in the top bar, the expanded card drops below the bar, centered on its slot', async () => {
+    const slotCenter = (({slot}) => slot.x + slot.width / 2)(placement());
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible() && pillSettled(), 'expanded card');
+    try {
+        await sleep(300);
+        const where = placement();
+        assert.equal(where.chip, false);
+        assert.equal(where.glassShown, true);
+        assert.ok(where.pillY >= where.panelBottom, `card overlaps the top bar: ${JSON.stringify(where)}`);
+        assert.ok(Math.abs(where.x + where.width / 2 - slotCenter) <= 1, `card not centered on the slot: ${JSON.stringify(where)}`);
+        screenshot('island-in-top-bar-expanded.png');
+    } finally {
+        pressKey('Escape');
+    }
+    await waitFor(() => !settingsButtonVisible() && placement().chip, 'chip again after collapsing');
+});
+
+test('with the top bar option off, the island floats centered below the bar', async () => {
+    setSetting('island-in-top-bar', 'false');
+    try {
+        await waitFor(() => placement().slot === null && !placement().chip, 'slot gone');
+        await waitFor(() => {
+            const {x, width, monitorWidth} = placement();
+            return Math.abs(x + width / 2 - monitorWidth / 2) <= 1;
+        }, 'island centered');
+        const where = placement();
+        assert.equal(where.visible, true);
+        assert.ok(where.y >= where.panelBottom, 'island overlaps the top bar');
+    } finally {
+        setSetting('island-in-top-bar', 'true');
+    }
+    await waitFor(() => placement().slot?.afterClock && placement().chip, 'back in the top bar');
 });
 
 test('pomodoro runs, pauses, skips and resets inside the shell', async () => {
@@ -521,7 +578,8 @@ test('expanded cards show the mini-app title, the collapsed pill does not', asyn
     await waitFor(() => cardTitle() === null, 'title hidden when collapsed');
 });
 
-test('the pill, the bubble and the page dots are frosted glass', async () => {
+test('floating, the pill, the bubble and the page dots are frosted glass', async () => {
+    setSetting('island-in-top-bar', 'false');
     cli('activities', 'push', '--id', 'glass', '--title', 'Glass check');
     try {
         await waitFor(() => bubbleState().visible, 'bubble beside the pill');
@@ -557,5 +615,6 @@ test('the pill, the bubble and the page dots are frosted glass', async () => {
         screenshot('island-glass.png');
     } finally {
         cli('activities', 'end', '--id', 'glass');
+        setSetting('island-in-top-bar', 'true');
     }
 });

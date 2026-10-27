@@ -20,7 +20,9 @@ export default class LinuxIslandExtension extends Extension {
         const openSettings = () => this.openPreferences();
         const pluginOrder = PLUGIN_MANIFEST.map(entry => entry.id);
 
-        this._island = new Island(this._registry, this._shells, {openSettings, cardOrder: pluginOrder});
+        this._island = new Island(this._registry, this._shells, {
+            openSettings, cardOrder: pluginOrder, settings: this._settings,
+        });
         this._loader = new PluginLoader({
             registry: this._registry,
             shells: this._shells,

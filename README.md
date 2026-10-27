@@ -50,7 +50,7 @@ dbus-run-session gnome-shell --nested --wayland
 
 One window with a page per area:
 
-- **Mini-apps**: switch each mini-app on or off. A disabled mini-app is unloaded at once: no sensors, no polling, gone from the D-Bus API.
+- **Mini-apps**: where the island sits, and each mini-app on or off. A disabled mini-app is unloaded at once: no sensors, no polling, gone from the D-Bus API.
 - **Pomodoro**: durations.
 - **Todoist**: API token.
 
@@ -58,10 +58,11 @@ Open it from the gear button at the bottom of the expanded island, from **Linux 
 
 ## Usage
 
+- By default the island sits in the top bar, right after the clock, as a plain bar item; expanded, its card drops below the bar. Turn off **Show the island in the top bar** in the settings to have it float below the bar instead, where it can cover a window's title bar.
 - Click the pill to expand or collapse it.
 - Every loaded mini-app is a card. Scroll over the pill, vertically or horizontally, to page through them; dots below the pill show which card is current. Cards go in the order of the settings window.
 - Expanded, the card shows the mini-app's name at the top and the dots sit at the bottom left. The arrow keys page too, and Escape or a click outside collapses the island.
-- The island is frosted glass: it blurs the wallpaper and windows behind it. In the overview it still shows the blurred desktop rather than the overview.
+- The island is frosted glass, except collapsed in the top bar: it blurs the wallpaper and windows behind it. In the overview it still shows the blurred desktop rather than the overview.
 - A card you page to stays in front until a mini-app with higher priority becomes active: privacy, then live activities, then the pomodoro, then Todoist.
 - The bubble beside the pill shows the most important other card; click it to expand that card.
 - Expanded pomodoro: reset, start/pause, skip phase.
