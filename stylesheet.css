@@ -28,6 +28,11 @@
     max-width: 160px;
 }
 
+.island-placeholder {
+    color: rgba(255, 255, 255, 0.55);
+    max-width: 320px;
+}
+
 .island:expanded {
     border-radius: 26px;
     padding: 12px 22px 16px;

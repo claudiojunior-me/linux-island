@@ -1,28 +1,50 @@
-// ABOUTME: The island drawn below the top bar: a pill with the top plugin and a bubble with the runner-up.
-// ABOUTME: Clicking either one expands that plugin inside the pill, with a settings button below it.
+// ABOUTME: The island drawn below the top bar: a pill with the current card and a bubble with the runner-up.
+// ABOUTME: Scrolling pages through the cards; expanded, the pill takes the keyboard for arrows and Escape.
 import Clutter from 'gi://Clutter';
+import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import {CardDeck} from '../core/card-deck.js';
+import {ScrollSteps} from '../core/scroll-steps.js';
 import {verticalBox} from './box.js';
 
 const GAP_BELOW_PANEL = 6;
 const RESIZE_DURATION_MS = 250;
 const BUBBLE_FADE_MS = 200;
-const VISIBLE_PLUGINS = 2;
+
+const PREVIOUS_KEYS = [Clutter.KEY_Left, Clutter.KEY_Up];
+const NEXT_KEYS = [Clutter.KEY_Right, Clutter.KEY_Down];
+const SCROLL_STEPS = {
+    [Clutter.ScrollDirection.UP]: -1,
+    [Clutter.ScrollDirection.LEFT]: -1,
+    [Clutter.ScrollDirection.DOWN]: 1,
+    [Clutter.ScrollDirection.RIGHT]: 1,
+};
+
+// GNOME Shell 49 and earlier report what a grab holds; from 50 a grab either holds the seat or is revoked.
+function grabHoldsKeyboard(grab) {
+    if (grab.get_seat_state)
+        return (grab.get_seat_state() & Clutter.GrabState.KEYBOARD) !== 0;
+    return !grab.is_revoked();
+}
 
 export class Island {
     // `shells` maps each plugin id to its shell part: {compact, expanded, minimal, update(state), destroy()}.
     // Plugins may come and go while the island is up; openSettings opens the preferences window.
-    constructor(registry, shells, {openSettings}) {
+    // cardOrder lists plugin ids in the order scrolling and the arrow keys page through them.
+    constructor(registry, shells, {openSettings, cardOrder}) {
         this._registry = registry;
         this._shells = shells;
+        this._deck = new CardDeck(registry, cardOrder);
+        this._scrollSteps = new ScrollSteps();
         this._pluginSubscriptions = new Map();
         this._pillId = null;
         this._pillExpanded = false;
         this._bubbleId = null;
-        this._expandedId = null;
+        this._expanded = false;
+        this._grab = null;
         this._renderedStates = new Map();
         this._disconnects = [];
 
@@ -51,8 +73,14 @@ export class Island {
         this.actor.add_child(this._pill);
         this.actor.add_child(this._bubble);
 
-        this._header.connect('clicked', () => this._expand(this._expandedId === null ? this._pillId : null));
-        this._bubble.connect('clicked', () => this._expand(this._bubbleId));
+        this._header.connect('clicked', () => this._setExpanded(!this._expanded));
+        this._bubble.connect('clicked', () => {
+            this._deck.choose(this._bubbleId);
+            this._setExpanded(true);
+        });
+        this._pill.connect('scroll-event', (_actor, event) => this._onScroll(event));
+        this._pill.connect('key-press-event', (_actor, event) => this._onKeyPress(event));
+        this.actor.connect('captured-event', (_actor, event) => this._onCapturedEvent(event));
         this.actor.connect('notify::width', () => this._reposition());
 
         this._disconnects.push(registry.subscribe(() => {
@@ -70,6 +98,7 @@ export class Island {
     }
 
     destroy() {
+        this._releaseKeyboard();
         this._disconnects.forEach(disconnect => disconnect());
         this._header.set_child(null);
         this._expandedBin.set_child(null);
@@ -102,26 +131,97 @@ export class Island {
             this._showInBubble(null);
     }
 
-    _expand(pluginId) {
-        this._expandedId = pluginId;
+    // Expanded, the island holds a modal grab so the arrow keys and Escape reach it, as top bar menus do.
+    _setExpanded(expanded) {
+        this._expanded = expanded;
+        if (expanded)
+            this._takeKeyboard();
+        else
+            this._releaseKeyboard();
         this._sync();
     }
 
-    _sync() {
-        const visible = this._registry.visible(VISIBLE_PLUGINS);
-        if (!visible.some(plugin => plugin.id === this._expandedId))
-            this._expandedId = null;
+    _takeKeyboard() {
+        if (this._grab)
+            return;
+        const grab = Main.pushModal(this.actor, {actionMode: Shell.ActionMode.POPUP});
+        if (!grabHoldsKeyboard(grab)) {
+            // Another grab holds the keyboard; the island stays expanded without it.
+            Main.popModal(grab);
+            return;
+        }
+        this._grab = grab;
+        this._pill.grab_key_focus();
+    }
 
-        const [primary, secondary = null] = visible;
-        if (!primary) {
+    _releaseKeyboard() {
+        if (!this._grab)
+            return;
+        Main.popModal(this._grab);
+        this._grab = null;
+    }
+
+    _page(step) {
+        if (step < 0)
+            this._deck.previous();
+        else if (step > 0)
+            this._deck.next();
+        this._sync();
+    }
+
+    _onScroll(event) {
+        // Smooth scroll devices also send emulated wheel events; counting both would page twice.
+        if (event.is_pointer_emulated())
+            return Clutter.EVENT_STOP;
+        const direction = event.get_scroll_direction();
+        let delta = SCROLL_STEPS[direction] ?? 0;
+        if (direction === Clutter.ScrollDirection.SMOOTH) {
+            const [dx, dy] = event.get_scroll_delta();
+            delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+        }
+        this._page(this._scrollSteps.add(delta));
+        return Clutter.EVENT_STOP;
+    }
+
+    _onKeyPress(event) {
+        const key = event.get_key_symbol();
+        if (key === Clutter.KEY_Escape)
+            this._setExpanded(false);
+        else if (PREVIOUS_KEYS.includes(key))
+            this._page(-1);
+        else if (NEXT_KEYS.includes(key))
+            this._page(1);
+        else
+            return Clutter.EVENT_PROPAGATE;
+        return Clutter.EVENT_STOP;
+    }
+
+    // While the grab is held, a press anywhere outside the pill collapses the island.
+    _onCapturedEvent(event) {
+        if (!this._grab)
+            return Clutter.EVENT_PROPAGATE;
+        const type = event.type();
+        if (type !== Clutter.EventType.BUTTON_PRESS && type !== Clutter.EventType.TOUCH_BEGIN)
+            return Clutter.EVENT_PROPAGATE;
+        if (this._pill.contains(global.stage.get_event_actor(event)))
+            return Clutter.EVENT_PROPAGATE;
+        this._setExpanded(false);
+        return Clutter.EVENT_STOP;
+    }
+
+    _sync() {
+        this._deck.refresh();
+        const pillPlugin = this._deck.current();
+        if (!pillPlugin) {
+            this._expanded = false;
+            this._releaseKeyboard();
             this.actor.hide();
             return;
         }
         this.actor.show();
 
-        const expanded = this._expandedId !== null;
-        const pillPlugin = expanded ? this._registry.get(this._expandedId) : primary;
-        const bubblePlugin = expanded ? null : secondary;
+        const expanded = this._expanded;
+        const bubblePlugin = expanded ? null : this._deck.runnerUp();
 
         this._render(pillPlugin);
         if (bubblePlugin)

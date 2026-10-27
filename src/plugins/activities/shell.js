@@ -4,6 +4,7 @@ import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 
 import {verticalBox} from '../../shell/box.js';
+import {placeholderLabel} from '../../shell/placeholder.js';
 import {ProgressBar} from '../../shell/progress-bar.js';
 
 // An icon when the activity names one, otherwise a dot in the accent color.
@@ -53,8 +54,10 @@ export function createActivitiesShell(plugin) {
             expanded.destroy_all_children();
             minimal.destroy_all_children();
             const [top] = activities;
-            if (!top)
+            if (!top) {
+                compact.add_child(placeholderLabel('No live activities'));
                 return;
+            }
 
             minimal.add_child(marker(top));
             minimal.add_child(new St.Label({

@@ -310,3 +310,115 @@ test('the expanded pill offers a settings button, collapsed it does not', async 
     clickIslandPart('header');
     await waitFor(() => !settingsButtonVisible(), 'settings button hidden when collapsed');
 });
+
+// Real input through virtual devices, so events go through the same grabs and focus as a user's.
+// One pointer lives for the whole run. Its first motions can land only partly, so each move is sent twice.
+const virtualPointer = `(() => {
+    if (!global.linuxIslandTestPointer) {
+        const seat = imports.gi.Clutter.get_default_backend().get_default_seat();
+        global.linuxIslandTestPointer = seat.create_virtual_device(imports.gi.Clutter.InputDeviceType.POINTER_DEVICE);
+    }
+    return global.linuxIslandTestPointer;
+})()`;
+
+async function movePointer(where) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        shellEval(`(() => {
+            const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+            const pill = group.get_children().find(a => a.name === 'linux-island-pill');
+            const [pillX, pillY] = pill.get_transformed_position();
+            const [x, y] = ${where === 'pill' ? '[pillX + pill.width / 2, pillY + pill.height / 2]' : '[40, global.stage.height - 40]'};
+            ${virtualPointer}.notify_absolute_motion(imports.gi.GLib.get_monotonic_time(), x, y);
+            return true;
+        })()`);
+        await sleep(150);
+    }
+}
+
+async function scrollPill(direction) {
+    await movePointer('pill');
+    shellEval(`(() => {
+        const Clutter = imports.gi.Clutter;
+        ${virtualPointer}.notify_discrete_scroll(imports.gi.GLib.get_monotonic_time(),
+            Clutter.ScrollDirection.${direction}, Clutter.ScrollSource.WHEEL);
+        return true;
+    })()`);
+}
+
+async function clickOutsideIsland() {
+    await movePointer('outside');
+    shellEval(`(() => {
+        const Clutter = imports.gi.Clutter;
+        const pointer = ${virtualPointer};
+        const now = imports.gi.GLib.get_monotonic_time();
+        pointer.notify_button(now, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.PRESSED);
+        pointer.notify_button(now, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.RELEASED);
+        return true;
+    })()`);
+}
+
+const pressKey = name => shellEval(`(() => {
+    const seat = imports.gi.Clutter.get_default_backend().get_default_seat();
+    const keyboard = seat.create_virtual_device(imports.gi.Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    const now = () => imports.gi.GLib.get_monotonic_time();
+    keyboard.notify_keyval(now(), imports.gi.Clutter.KEY_${name}, imports.gi.Clutter.KeyState.PRESSED);
+    keyboard.notify_keyval(now(), imports.gi.Clutter.KEY_${name}, imports.gi.Clutter.KeyState.RELEASED);
+    return true;
+})()`);
+
+const pillShows = text => islandTexts().includes(text);
+
+// Scrolling over the collapsed pill is checked by hand in scripts/dev.sh: the headless shell delivers
+// virtual pointer events only while the island holds a grab. The expanded tests below run the same handler.
+
+test('arrow keys page through the expanded cards and Escape collapses', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    pressKey('Right');
+    await waitFor(() => pillShows('No live activities'), 'activities card expanded');
+    assert.equal(settingsButtonVisible(), true);
+    pressKey('Down');
+    await waitFor(() => pillShows('No mic, camera or screen in use'), 'privacy card expanded');
+    pressKey('Up');
+    pressKey('Left');
+    await waitFor(() => pillShows('Focus'), 'pomodoro card expanded');
+    pressKey('Escape');
+    await waitFor(() => !settingsButtonVisible(), 'collapsed by Escape');
+});
+
+test('scrolling pages through the expanded cards too', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    try {
+        await scrollPill('DOWN');
+        await waitFor(() => pillShows('No live activities'), 'activities card expanded');
+        await scrollPill('UP');
+        await waitFor(() => pillShows('Focus'), 'pomodoro card expanded');
+    } finally {
+        pressKey('Escape');
+    }
+    await waitFor(() => !settingsButtonVisible(), 'collapsed');
+});
+
+test('clicking outside the expanded island collapses it', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    await clickOutsideIsland();
+    await waitFor(() => !settingsButtonVisible(), 'collapsed by a click outside');
+});
+
+test('a plugin with higher priority becoming active takes over a chosen card', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    pressKey('Left');
+    await waitFor(() => pillShows('Todoist · add a token in settings'), 'todoist card chosen');
+    pressKey('Escape');
+    await waitFor(() => !settingsButtonVisible(), 'collapsed on the todoist card');
+    cli('activities', 'push', '--id', 'takeover', '--title', 'Deploy finished');
+    try {
+        await waitFor(() => pillShows('Deploy finished'), 'activity takes over the pill');
+    } finally {
+        cli('activities', 'end', '--id', 'takeover');
+    }
+    await waitFor(() => pillShows('25:00'), 'pomodoro back once the activity ends');
+});

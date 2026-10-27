@@ -7,6 +7,7 @@ import St from 'gi://St';
 import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 
 import {verticalBox} from '../../shell/box.js';
+import {placeholderLabel} from '../../shell/placeholder.js';
 
 // Mixer apps open input streams to draw level meters; the shell's microphone indicator ignores them too.
 const MIXER_APPS = ['org.gnome.VolumeControl', 'org.PulseAudio.pavucontrol'];
@@ -97,8 +98,10 @@ export function createPrivacyShell(plugin) {
             minimal.destroy_all_children();
             expanded.destroy_all_children();
             const sensors = sensorsInUse(state);
-            if (sensors.length === 0)
+            if (sensors.length === 0) {
+                compact.add_child(placeholderLabel('No mic, camera or screen in use'));
                 return;
+            }
 
             const dots = new St.BoxLayout({style_class: 'privacy-dots'});
             sensors.forEach(sensor => dots.add_child(sensorDot(sensor.kind)));
