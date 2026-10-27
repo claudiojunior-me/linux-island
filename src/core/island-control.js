@@ -2,8 +2,16 @@
 // ABOUTME: Method names match the D-Bus interface so it can be exported as-is.
 
 export class IslandControl {
-    constructor(registry) {
+    // openSettings opens the preferences window; the shell provides it.
+    constructor(registry, {openSettings = null} = {}) {
         this._registry = registry;
+        this._openSettings = openSettings;
+    }
+
+    OpenSettings() {
+        if (!this._openSettings)
+            throw new Error('settings window is not available');
+        this._openSettings();
     }
 
     ListPlugins() {

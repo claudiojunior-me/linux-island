@@ -1,5 +1,5 @@
-// ABOUTME: Lists the plugins the island loads, pairing each plugin with its GNOME Shell part.
-// ABOUTME: Add an entry here to ship a new plugin; createShell(plugin, {settings}) gets the extension settings.
+// ABOUTME: Pairs each plugin id from the manifest with its plugin and GNOME Shell part.
+// ABOUTME: Add an entry here and in manifest.js to ship a new plugin; createShell gets {settings}.
 import {LiveActivitiesPlugin} from './activities/plugin.js';
 import {createActivitiesShell} from './activities/shell.js';
 import {PomodoroPlugin} from './pomodoro/plugin.js';
@@ -9,9 +9,9 @@ import {createPrivacyShell} from './privacy/shell.js';
 import {TodoistPlugin} from './todoist/plugin.js';
 import {createTodoistShell} from './todoist/shell.js';
 
-export const PLUGIN_CATALOG = [
-    {create: () => new PomodoroPlugin(), createShell: createPomodoroShell},
-    {create: () => new LiveActivitiesPlugin(), createShell: createActivitiesShell},
-    {create: () => new PrivacyPlugin(), createShell: createPrivacyShell},
-    {create: () => new TodoistPlugin(), createShell: createTodoistShell},
-];
+export const PLUGIN_FACTORIES = {
+    pomodoro: {create: () => new PomodoroPlugin(), createShell: createPomodoroShell},
+    activities: {create: () => new LiveActivitiesPlugin(), createShell: createActivitiesShell},
+    privacy: {create: () => new PrivacyPlugin(), createShell: createPrivacyShell},
+    todoist: {create: () => new TodoistPlugin(), createShell: createTodoistShell},
+};

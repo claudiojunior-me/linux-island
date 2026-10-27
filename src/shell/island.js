@@ -1,5 +1,5 @@
 // ABOUTME: The island drawn below the top bar: a pill with the top plugin and a bubble with the runner-up.
-// ABOUTME: Clicking either one expands that plugin inside the pill with a size animation.
+// ABOUTME: Clicking either one expands that plugin inside the pill, with a settings button below it.
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 
@@ -14,9 +14,11 @@ const VISIBLE_PLUGINS = 2;
 
 export class Island {
     // `shells` maps each plugin id to its shell part: {compact, expanded, minimal, update(state), destroy()}.
-    constructor(registry, shells) {
+    // Plugins may come and go while the island is up; openSettings opens the preferences window.
+    constructor(registry, shells, {openSettings}) {
         this._registry = registry;
         this._shells = shells;
+        this._pluginSubscriptions = new Map();
         this._pillId = null;
         this._pillExpanded = false;
         this._bubbleId = null;
@@ -30,11 +32,22 @@ export class Island {
         });
         this._header = new St.Button({style_class: 'island-header', x_expand: true});
         this._expandedBin = new St.Bin({style_class: 'island-expanded-content', visible: false});
+        this._footer = new St.BoxLayout({style_class: 'island-footer', visible: false});
+        const settingsButton = new St.Button({
+            style_class: 'island-settings-button',
+            accessible_name: 'Linux Island settings',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.END,
+            child: new St.Icon({icon_name: 'emblem-system-symbolic', style_class: 'island-settings-icon'}),
+        });
+        settingsButton.connect('clicked', () => openSettings());
+        this._footer.add_child(settingsButton);
         this._bubble = new St.Button({
             name: 'linux-island-bubble', style_class: 'island-bubble', y_align: Clutter.ActorAlign.START, visible: false,
         });
         this._pill.add_child(this._header);
         this._pill.add_child(this._expandedBin);
+        this._pill.add_child(this._footer);
         this.actor.add_child(this._pill);
         this.actor.add_child(this._bubble);
 
@@ -42,9 +55,12 @@ export class Island {
         this._bubble.connect('clicked', () => this._expand(this._bubbleId));
         this.actor.connect('notify::width', () => this._reposition());
 
-        this._disconnects.push(registry.subscribe(() => this._sync()));
-        for (const plugin of registry.list())
-            this._disconnects.push(plugin.subscribe(() => this._sync()));
+        this._disconnects.push(registry.subscribe(() => {
+            this._trackPlugins();
+            this._sync();
+        }));
+        this._disconnects.push(() => this._pluginSubscriptions.forEach(unsubscribe => unsubscribe()));
+        this._trackPlugins();
 
         const monitorsId = Main.layoutManager.connect('monitors-changed', () => this._reposition());
         this._disconnects.push(() => Main.layoutManager.disconnect(monitorsId));
@@ -60,6 +76,30 @@ export class Island {
         this._bubble.set_child(null);
         Main.layoutManager.removeChrome(this.actor);
         this.actor.destroy();
+    }
+
+    // Follows plugins as they are loaded and unloaded, letting go of views that are about to be destroyed.
+    _trackPlugins() {
+        const registered = new Set(this._registry.list().map(plugin => plugin.id));
+        for (const [id, unsubscribe] of this._pluginSubscriptions) {
+            if (!registered.has(id)) {
+                unsubscribe();
+                this._pluginSubscriptions.delete(id);
+                this._renderedStates.delete(id);
+            }
+        }
+        for (const plugin of this._registry.list()) {
+            if (!this._pluginSubscriptions.has(plugin.id))
+                this._pluginSubscriptions.set(plugin.id, plugin.subscribe(() => this._sync()));
+        }
+
+        if (this._pillId !== null && !registered.has(this._pillId)) {
+            this._header.set_child(null);
+            this._expandedBin.set_child(null);
+            this._pillId = null;
+        }
+        if (this._bubbleId !== null && !registered.has(this._bubbleId))
+            this._showInBubble(null);
     }
 
     _expand(pluginId) {
@@ -112,6 +152,7 @@ export class Island {
         this._header.set_child(shell.compact);
         this._expandedBin.set_child(shell.expanded);
         this._expandedBin.visible = expanded;
+        this._footer.visible = expanded;
         if (expanded)
             this._pill.add_style_pseudo_class('expanded');
         else

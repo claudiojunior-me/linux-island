@@ -3,6 +3,10 @@
 <!-- ABOUTME: Keys are prefixed with the plugin that reads them. -->
 <schemalist>
   <schema id="org.gnome.shell.extensions.linux-island" path="/org/gnome/shell/extensions/linux-island/">
+    <key name="enabled-plugins" type="as">
+      <default>['pomodoro', 'activities', 'privacy', 'todoist']</default>
+      <summary>Mini-apps the island loads</summary>
+    </key>
     <key name="pomodoro-work-minutes" type="i">
       <range min="1" max="180"/>
       <default>25</default>
