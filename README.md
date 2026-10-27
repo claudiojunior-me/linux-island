@@ -44,6 +44,8 @@ dbus-run-session gnome-shell --devkit
 dbus-run-session gnome-shell --nested --wayland
 ```
 
+`--devkit` draws the nested shell in a window opened by `/usr/libexec/mutter-devkit`, which ships separately (`sudo dnf install mutter-devkit` on Fedora). Without it the nested shell runs with no window at all.
+
 ## Settings
 
 One window with a page per area:
