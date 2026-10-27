@@ -7,6 +7,7 @@ Plugins:
 - **Pomodoro**: focus and break timer with configurable durations.
 - **Live activities**: cards any script can push, e.g. build progress or "waiting for you".
 - **Claude Code status**: one card per Claude Code session: working, waiting for you, finished.
+- **Privacy**: which apps use the microphone, screen sharing or recording (with a stop button), and the camera on GNOME 47+.
 
 ## Requirements
 
@@ -129,6 +130,8 @@ src/plugins/
   catalog.js                 Plugins the island loads
   activities/plugin.js       Live activities (pure)
   activities/shell.js        Live activity views
+  privacy/plugin.js          Microphone, screen and camera use (pure)
+  privacy/shell.js           Sensors (mixer, remote access controller, camera monitor) and views
   pomodoro/timer.js          Pomodoro state machine (pure)
   pomodoro/plugin.js         Plugin contract implementation (pure)
   pomodoro/settings.js       Settings keys for the pomodoro durations

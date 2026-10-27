@@ -75,7 +75,7 @@ before(async () => {
 });
 
 test('exposes the plugins with pomodoro as foreground', () => {
-    assert.equal(cli('list'), 'pomodoro\nactivities');
+    assert.equal(cli('list'), 'pomodoro\nactivities\nprivacy');
     assert.equal(cli('foreground'), 'pomodoro');
 });
 
@@ -216,4 +216,11 @@ test('an activity and the idle pomodoro share the island: pill and bubble', asyn
 
     cli('activities', 'end', '--id', 'task');
     await waitFor(() => !bubbleState().visible, 'bubble gone when only the pomodoro is left');
+});
+
+test('privacy plugin loads its monitors and stays hidden while nothing is in use', () => {
+    const privacy = state('privacy');
+    assert.deepEqual(privacy.microphoneApps, []);
+    assert.equal(privacy.screen, null);
+    assert.notEqual(cli('foreground'), 'privacy');
 });

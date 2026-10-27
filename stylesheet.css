@@ -212,3 +212,49 @@
 .activity-dismiss-icon {
     icon-size: 12px;
 }
+
+.privacy-compact,
+.privacy-row {
+    spacing: 8px;
+}
+
+.privacy-dots {
+    spacing: 4px;
+}
+
+.privacy-list {
+    spacing: 8px;
+    min-width: 240px;
+}
+
+.privacy-summary {
+    max-width: 280px;
+}
+
+.privacy-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+}
+
+.privacy-dot.microphone {
+    background-color: #ff9f0a;
+}
+
+.privacy-dot.camera {
+    background-color: #30d158;
+}
+
+.privacy-dot.screen {
+    background-color: #ff453a;
+}
+
+.privacy-stop {
+    border-radius: 99px;
+    padding: 4px 12px;
+    background-color: rgba(255, 69, 58, 0.25);
+}
+
+.privacy-stop:hover {
+    background-color: rgba(255, 69, 58, 0.45);
+}
