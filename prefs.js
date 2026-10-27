@@ -5,13 +5,25 @@ import Gio from 'gi://Gio';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
+import {IN_TOP_BAR_SETTING} from './src/core/island-settings.js';
 import {ENABLED_PLUGINS_SETTING, PLUGIN_MANIFEST} from './src/plugins/manifest.js';
 import {POMODORO_SETTING_KEYS} from './src/plugins/pomodoro/settings.js';
 import {TODOIST_TOKEN_SETTING} from './src/plugins/todoist/settings.js';
 
+// Where the island sits on screen.
+function placementGroup(settings) {
+    const group = new Adw.PreferencesGroup({title: 'Island'});
+    const schemaKey = settings.settings_schema.get_key(IN_TOP_BAR_SETTING);
+    const row = new Adw.SwitchRow({title: schemaKey.get_summary(), subtitle: schemaKey.get_description()});
+    settings.bind(IN_TOP_BAR_SETTING, row, 'active', Gio.SettingsBindFlags.DEFAULT);
+    group.add(row);
+    return group;
+}
+
 // One switch per shipped plugin; the setting keeps manifest order so the island's order stays stable.
 function miniAppsPage(settings) {
     const page = new Adw.PreferencesPage({title: 'Mini-apps', icon_name: 'view-grid-symbolic'});
+    page.add(placementGroup(settings));
     const group = new Adw.PreferencesGroup({
         title: 'Mini-apps',
         description: 'A disabled mini-app is unloaded: it stops watching, polling and answering on D-Bus.',

@@ -25,9 +25,13 @@ const cli = (...args) => execFileSync(ISLAND_CLI, args, {encoding: 'utf8', stdio
 
 const state = (pluginId = 'pomodoro') => JSON.parse(parseGdbusString(island('GetState', pluginId)));
 
+// Lets evaluated code find an actor by name anywhere below a root.
+const EVAL_HELPERS = `const deepFind = (root, name) => root.name === name
+    ? root : root.get_children().reduce((found, child) => found ?? deepFind(child, name), null);`;
+
 // Runs JavaScript inside the shell; needs gnome-shell --unsafe-mode.
 function shellEval(code) {
-    const output = gdbusCall('org.gnome.Shell', '/org/gnome/Shell', 'org.gnome.Shell.Eval', code);
+    const output = gdbusCall('org.gnome.Shell', '/org/gnome/Shell', 'org.gnome.Shell.Eval', `${EVAL_HELPERS}\n${code}`);
     assert.ok(output.startsWith('(true,'), `Eval failed: ${output}`);
     return JSON.parse(parseGdbusString(output));
 }
@@ -79,22 +83,79 @@ test('exposes the plugins with pomodoro as foreground', () => {
     assert.equal(cli('foreground'), 'pomodoro');
 });
 
-test('island is on screen, centered below the top bar', () => {
-    const geometry = shellEval(`(() => {
-        const actor = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
-        const [x, y] = actor.get_transformed_position();
-        return {
-            visible: actor.visible && actor.mapped,
-            x, y, width: actor.width,
-            monitorWidth: Main.layoutManager.primaryMonitor.width,
-            panelBottom: Main.layoutManager.panelBox.y + Main.layoutManager.panelBox.height,
-        };
-    })()`);
+// Where the island and the top bar are on screen, and the slot the bar keeps for the island.
+const placement = () => shellEval(`(() => {
+    const actor = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+    const pill = deepFind(actor, 'linux-island-pill');
+    const slot = deepFind(Main.panel, 'linux-island-panel-slot');
+    const centerItems = Main.panel._centerBox.get_children();
+    const [x, y] = actor.get_transformed_position();
+    const [pillX, pillY] = pill.get_transformed_position();
+    const [slotX] = slot ? slot.get_transformed_position() : [null];
+    return {
+        visible: actor.visible && actor.mapped,
+        x, y, width: actor.width, height: actor.height,
+        pillY, pillHeight: pill.height,
+        monitorWidth: Main.layoutManager.primaryMonitor.width,
+        panelTop: Main.layoutManager.panelBox.y,
+        panelBottom: Main.layoutManager.panelBox.y + Main.layoutManager.panelBox.height,
+        slot: slot ? {x: slotX, width: slot.width,
+            afterClock: centerItems.indexOf(slot) === centerItems.indexOf(Main.panel.statusArea.dateMenu.container) + 1,
+        } : null,
+        chip: pill.has_style_pseudo_class('in-top-bar'),
+        glassShown: deepFind(actor, 'linux-island-pill-glass').visible,
+    };
+})()`);
 
-    assert.equal(geometry.visible, true);
-    assert.ok(geometry.y >= geometry.panelBottom, 'island overlaps the top bar');
-    const center = geometry.x + geometry.width / 2;
-    assert.ok(Math.abs(center - geometry.monitorWidth / 2) <= 1, `island not centered: ${center}`);
+test('by default the collapsed island sits in the top bar right after the clock', async () => {
+    await waitFor(() => placement().slot?.afterClock, 'slot after the clock');
+    await waitFor(() => {
+        const {x, slot} = placement();
+        return Math.abs(x - slot.x) <= 1;
+    }, 'island over its slot');
+    const where = placement();
+    assert.equal(where.visible, true);
+    assert.equal(where.chip, true);
+    assert.equal(where.glassShown, false);
+    assert.ok(where.y >= where.panelTop && where.y + where.height <= where.panelBottom,
+        `island not inside the top bar: ${JSON.stringify(where)}`);
+    assert.ok(Math.abs(where.slot.width - where.width) <= 1, `slot does not fit the island: ${JSON.stringify(where)}`);
+    screenshot('island-in-top-bar.png');
+});
+
+test('in the top bar, the expanded card drops below the bar, centered on its slot', async () => {
+    const slotCenter = (({slot}) => slot.x + slot.width / 2)(placement());
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible() && pillSettled(), 'expanded card');
+    try {
+        await sleep(300);
+        const where = placement();
+        assert.equal(where.chip, false);
+        assert.equal(where.glassShown, true);
+        assert.ok(where.pillY >= where.panelBottom, `card overlaps the top bar: ${JSON.stringify(where)}`);
+        assert.ok(Math.abs(where.x + where.width / 2 - slotCenter) <= 1, `card not centered on the slot: ${JSON.stringify(where)}`);
+        screenshot('island-in-top-bar-expanded.png');
+    } finally {
+        pressKey('Escape');
+    }
+    await waitFor(() => !settingsButtonVisible() && placement().chip, 'chip again after collapsing');
+});
+
+test('with the top bar option off, the island floats centered below the bar', async () => {
+    setSetting('island-in-top-bar', 'false');
+    try {
+        await waitFor(() => placement().slot === null && !placement().chip, 'slot gone');
+        await waitFor(() => {
+            const {x, width, monitorWidth} = placement();
+            return Math.abs(x + width / 2 - monitorWidth / 2) <= 1;
+        }, 'island centered');
+        const where = placement();
+        assert.equal(where.visible, true);
+        assert.ok(where.y >= where.panelBottom, 'island overlaps the top bar');
+    } finally {
+        setSetting('island-in-top-bar', 'true');
+    }
+    await waitFor(() => placement().slot?.afterClock && placement().chip, 'back in the top bar');
 });
 
 test('pomodoro runs, pauses, skips and resets inside the shell', async () => {
@@ -119,11 +180,13 @@ test('pomodoro runs, pauses, skips and resets inside the shell', async () => {
 
 test('island shows the running countdown', async () => {
     island('Activate', 'pomodoro', 'start');
-    await sleep(1500);
-    const texts = islandTexts();
-    assert.ok(texts.includes(state().countdown), `countdown missing from island: ${texts}`);
-    screenshot('island-running.png');
-    island('Activate', 'pomodoro', 'reset');
+    try {
+        // The island redraws on the once-a-second tick, so it can trail the state by up to a second.
+        await waitFor(() => islandTexts().some(text => /^24:5\d$/.test(text)), 'running countdown on the island');
+        screenshot('island-running.png');
+    } finally {
+        island('Activate', 'pomodoro', 'reset');
+    }
 });
 
 test('unknown plugins and actions return D-Bus errors', () => {
@@ -177,16 +240,19 @@ test('the Claude Code hook mirrors a session on the island', async () => {
 });
 
 const clickIslandPart = name => shellEval(`(() => {
+    const name = ${JSON.stringify(name)};
     const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
-    const pill = group.get_children().find(a => a.name === 'linux-island-pill');
-    const part = name === 'header' ? pill.get_first_child() : group.get_children().find(a => a.name === name);
+    const pill = deepFind(group, 'linux-island-pill');
+    const part = name === 'header'
+        ? pill.get_children().find(a => a.has_style_class_name('island-header'))
+        : deepFind(group, name);
     part.emit('clicked', 1);
     return true;
 })()`);
 
 const bubbleState = () => shellEval(`(() => {
     const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
-    const bubble = group.get_children().find(a => a.name === 'linux-island-bubble');
+    const bubble = deepFind(group, 'linux-island-bubble');
     const texts = [];
     const walk = actor => {
         if (actor.text !== undefined && actor.text !== null) texts.push(actor.text);
@@ -200,21 +266,23 @@ test('an activity and the idle pomodoro share the island: pill and bubble', asyn
     assert.equal(bubbleState().visible, false);
 
     cli('activities', 'push', '--id', 'task', '--title', 'Write report');
-    await waitFor(() => bubbleState().visible, 'bubble to appear');
-    assert.ok(bubbleState().texts.includes('25:00'), `pomodoro missing from bubble: ${bubbleState().texts}`);
-    await sleep(400);
-    screenshot('island-two-slots.png');
+    try {
+        await waitFor(() => bubbleState().visible, 'bubble to appear');
+        assert.ok(bubbleState().texts.includes('25:00'), `pomodoro missing from bubble: ${bubbleState().texts}`);
+        await sleep(400);
+        screenshot('island-two-slots.png');
 
-    clickIslandPart('linux-island-bubble');
-    await waitFor(() => islandTexts().includes('Focus'), 'pomodoro expanded in the pill');
-    assert.equal(bubbleState().visible, false);
-    await sleep(400);
-    screenshot('island-bubble-expanded.png');
+        clickIslandPart('linux-island-bubble');
+        await waitFor(() => islandTexts().includes('Focus'), 'pomodoro expanded in the pill');
+        assert.equal(bubbleState().visible, false);
+        await sleep(400);
+        screenshot('island-bubble-expanded.png');
 
-    clickIslandPart('header');
-    await waitFor(() => bubbleState().visible, 'bubble back after collapsing');
-
-    cli('activities', 'end', '--id', 'task');
+        clickIslandPart('header');
+        await waitFor(() => bubbleState().visible, 'bubble back after collapsing');
+    } finally {
+        cli('activities', 'end', '--id', 'task');
+    }
     await waitFor(() => !bubbleState().visible, 'bubble gone when only the pomodoro is left');
 });
 
@@ -304,4 +372,249 @@ test('the expanded pill offers a settings button, collapsed it does not', async 
     screenshot('island-expanded-settings.png');
     clickIslandPart('header');
     await waitFor(() => !settingsButtonVisible(), 'settings button hidden when collapsed');
+});
+
+// Real input through virtual devices, so events go through the same grabs and focus as a user's.
+// One pointer lives for the whole run. Its first motions can land only partly, so each move is sent twice.
+const virtualPointer = `(() => {
+    if (!global.linuxIslandTestPointer) {
+        const seat = imports.gi.Clutter.get_default_backend().get_default_seat();
+        global.linuxIslandTestPointer = seat.create_virtual_device(imports.gi.Clutter.InputDeviceType.POINTER_DEVICE);
+    }
+    return global.linuxIslandTestPointer;
+})()`;
+
+async function movePointer(where) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        shellEval(`(() => {
+            const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+            const pill = deepFind(group, 'linux-island-pill');
+            const [pillX, pillY] = pill.get_transformed_position();
+            const [x, y] = ${where === 'pill' ? '[pillX + pill.width / 2, pillY + pill.height / 2]' : '[40, global.stage.height - 40]'};
+            ${virtualPointer}.notify_absolute_motion(imports.gi.GLib.get_monotonic_time(), x, y);
+            return true;
+        })()`);
+        await sleep(150);
+    }
+}
+
+async function scrollPill(direction) {
+    await movePointer('pill');
+    shellEval(`(() => {
+        const Clutter = imports.gi.Clutter;
+        ${virtualPointer}.notify_discrete_scroll(imports.gi.GLib.get_monotonic_time(),
+            Clutter.ScrollDirection.${direction}, Clutter.ScrollSource.WHEEL);
+        return true;
+    })()`);
+}
+
+async function clickOutsideIsland() {
+    await movePointer('outside');
+    shellEval(`(() => {
+        const Clutter = imports.gi.Clutter;
+        const pointer = ${virtualPointer};
+        const now = imports.gi.GLib.get_monotonic_time();
+        pointer.notify_button(now, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.PRESSED);
+        pointer.notify_button(now, Clutter.BUTTON_PRIMARY, Clutter.ButtonState.RELEASED);
+        return true;
+    })()`);
+}
+
+const pressKey = name => shellEval(`(() => {
+    const seat = imports.gi.Clutter.get_default_backend().get_default_seat();
+    const keyboard = seat.create_virtual_device(imports.gi.Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    const now = () => imports.gi.GLib.get_monotonic_time();
+    keyboard.notify_keyval(now(), imports.gi.Clutter.KEY_${name}, imports.gi.Clutter.KeyState.PRESSED);
+    keyboard.notify_keyval(now(), imports.gi.Clutter.KEY_${name}, imports.gi.Clutter.KeyState.RELEASED);
+    return true;
+})()`);
+
+const pillShows = text => islandTexts().includes(text);
+
+// Scrolling over the collapsed pill is checked by hand in scripts/dev.sh: the headless shell delivers
+// virtual pointer events only while the island holds a grab. The expanded tests below run the same handler.
+
+test('arrow keys page through the expanded cards and Escape collapses', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    pressKey('Right');
+    await waitFor(() => pillShows('No live activities'), 'activities card expanded');
+    assert.equal(settingsButtonVisible(), true);
+    pressKey('Down');
+    await waitFor(() => pillShows('No mic, camera or screen in use'), 'privacy card expanded');
+    pressKey('Up');
+    pressKey('Left');
+    await waitFor(() => pillShows('Focus'), 'pomodoro card expanded');
+    pressKey('Escape');
+    await waitFor(() => !settingsButtonVisible(), 'collapsed by Escape');
+});
+
+test('scrolling pages through the expanded cards too', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    try {
+        await scrollPill('DOWN');
+        await waitFor(() => pillShows('No live activities'), 'activities card expanded');
+        await scrollPill('UP');
+        await waitFor(() => pillShows('Focus'), 'pomodoro card expanded');
+    } finally {
+        pressKey('Escape');
+    }
+    await waitFor(() => !settingsButtonVisible(), 'collapsed');
+});
+
+test('clicking outside the expanded island collapses it', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    await clickOutsideIsland();
+    await waitFor(() => !settingsButtonVisible(), 'collapsed by a click outside');
+});
+
+test('a plugin with higher priority becoming active takes over a chosen card', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    pressKey('Left');
+    await waitFor(() => pillShows('Todoist · add a token in settings'), 'todoist card chosen');
+    pressKey('Escape');
+    await waitFor(() => !settingsButtonVisible(), 'collapsed on the todoist card');
+    cli('activities', 'push', '--id', 'takeover', '--title', 'Deploy finished');
+    try {
+        await waitFor(() => pillShows('Deploy finished'), 'activity takes over the pill');
+    } finally {
+        cli('activities', 'end', '--id', 'takeover');
+    }
+    await waitFor(() => pillShows('25:00'), 'pomodoro back once the activity ends');
+});
+
+// A page-dots row anywhere in the shell by name: whether it shows, how many dots, which one is marked.
+const pageDots = name => shellEval(`(() => {
+    let row = null;
+    const walk = actor => {
+        if (actor.name === ${JSON.stringify(name)}) row = actor;
+        actor.get_children().forEach(walk);
+    };
+    walk(Main.layoutManager.uiGroup);
+    if (!row) return {shown: false, count: 0, active: -1};
+    const dots = row.get_children();
+    return {
+        shown: row.mapped && row.opacity > 0,
+        count: dots.length,
+        active: dots.findIndex(dot => dot.has_style_class_name('active')),
+    };
+})()`);
+
+// Cards finish their slide fully visible and back in place, and the pill ends at its natural size.
+const pillSettled = () => shellEval(`(() => {
+    const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+    const pill = deepFind(group, 'linux-island-pill');
+    const [, naturalHeight] = pill.get_preferred_height(-1);
+    return pill.get_children().every(part => part.opacity === 255 && part.translation_x === 0) &&
+        Math.round(pill.height) === Math.round(naturalHeight);
+})()`);
+
+// Pages the collapsed pill the way a scroll does; the headless shell cannot deliver that scroll.
+const pageCollapsedIsland = step => shellEval(`(() => {
+    Main.extensionManager.lookup('linux-island@claudiojunior-me.github.io').stateObj._island._page(${step});
+    return true;
+})()`);
+
+test('the expanded pill shows a dot per card with the current one marked', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    try {
+        assert.deepEqual(pageDots('linux-island-footer-dots'), {shown: true, count: 4, active: 0});
+        pressKey('Right');
+        await waitFor(() => pillShows('No live activities') && pillSettled(), 'activities card slid in');
+        assert.equal(pageDots('linux-island-footer-dots').active, 1);
+        await sleep(200);
+        screenshot('island-expanded-dots.png');
+        pressKey('Left');
+        await waitFor(() => pillShows('Focus') && pillSettled(), 'pomodoro card slid back');
+    } finally {
+        pressKey('Escape');
+    }
+    await waitFor(() => !settingsButtonVisible(), 'collapsed');
+    assert.equal(pageDots('linux-island-footer-dots').shown, false);
+});
+
+test('paging the collapsed pill shows the dots below it for a moment', async () => {
+    assert.equal(pageDots('linux-island-peek-dots').shown, false);
+    pageCollapsedIsland(1);
+    await waitFor(() => pageDots('linux-island-peek-dots').shown, 'dots below the pill');
+    assert.deepEqual(pageDots('linux-island-peek-dots'), {shown: true, count: 4, active: 1});
+    await waitFor(() => pillShows('No live activities') && pillSettled(), 'activities card slid in');
+    screenshot('island-peek-dots.png');
+    await sleep(2000);
+    assert.equal(pageDots('linux-island-peek-dots').shown, false);
+    pageCollapsedIsland(-1);
+    await waitFor(() => pillShows('25:00') && pillSettled(), 'pomodoro back in the pill');
+});
+
+// Text of the card title above the expanded content, or null while it is not on screen.
+const cardTitle = () => shellEval(`(() => {
+    let title = null;
+    const walk = actor => {
+        if (actor.name === 'linux-island-card-title' && actor.mapped) title = actor.text;
+        actor.get_children().forEach(walk);
+    };
+    walk(Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island'));
+    return title;
+})()`);
+
+test('expanded cards show the mini-app title, the collapsed pill does not', async () => {
+    assert.equal(cardTitle(), null);
+    clickIslandPart('header');
+    await waitFor(() => cardTitle() === 'Pomodoro', 'pomodoro title');
+    try {
+        pressKey('Right');
+        await waitFor(() => cardTitle() === 'Activities' && pillSettled(), 'activities title');
+        await sleep(200);
+        screenshot('island-expanded-title.png');
+        pressKey('Left');
+        await waitFor(() => cardTitle() === 'Pomodoro' && pillSettled(), 'pomodoro title again');
+    } finally {
+        pressKey('Escape');
+    }
+    await waitFor(() => cardTitle() === null, 'title hidden when collapsed');
+});
+
+test('floating, the pill, the bubble and the page dots are frosted glass', async () => {
+    setSetting('island-in-top-bar', 'false');
+    cli('activities', 'push', '--id', 'glass', '--title', 'Glass check');
+    try {
+        await waitFor(() => bubbleState().visible, 'bubble beside the pill');
+        await sleep(400);
+        const glass = shellEval(`(() => {
+            const names = ['linux-island-pill', 'linux-island-bubble', 'linux-island-peek-dots'];
+            return Object.fromEntries(names.map(name => {
+                const surface = deepFind(Main.layoutManager.uiGroup, name);
+                const frame = surface.get_parent();
+                const backdrop = frame.get_first_child();
+                const scene = backdrop.get_first_child();
+                return [name, {
+                    backdrop: backdrop.name,
+                    effects: backdrop.get_effects().map(effect => effect.name),
+                    copiesTheScene: scene.source === global.window_group,
+                    sceneAtStageOrigin: scene.x === 0 && scene.y === 0,
+                    sameSizeAsSurface: !surface.mapped || Math.round(backdrop.width) === Math.round(surface.width) &&
+                        Math.round(backdrop.height) === Math.round(surface.height),
+                    shownWithSurface: frame.visible === surface.visible,
+                }];
+            }));
+        })()`);
+        for (const name of ['linux-island-pill', 'linux-island-bubble', 'linux-island-peek-dots']) {
+            assert.deepEqual(glass[name], {
+                backdrop: `${name}-glass`,
+                effects: ['island-glass-corners', 'island-glass-blur'],
+                copiesTheScene: true,
+                sceneAtStageOrigin: true,
+                sameSizeAsSurface: true,
+                shownWithSurface: true,
+            }, name);
+        }
+        screenshot('island-glass.png');
+    } finally {
+        cli('activities', 'end', '--id', 'glass');
+        setSetting('island-in-top-bar', 'true');
+    }
 });

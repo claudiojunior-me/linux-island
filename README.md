@@ -22,9 +22,20 @@ scripts/install.sh
 gnome-extensions enable linux-island@claudiojunior-me.github.io
 ```
 
-On Wayland, GNOME Shell only picks up a newly installed extension after you log out and back in. After that, re-running `scripts/install.sh` followed by `gnome-extensions disable`/`enable` is enough for most changes.
+On Wayland, GNOME Shell only picks up a newly installed extension after you log out and back in.
 
-To try it without touching your session, run a nested shell:
+`scripts/install.sh` copies the checkout, so re-run it after every change. What else a change needs depends on the file:
+
+| Changed | To see it |
+| --- | --- |
+| `prefs.js` | Reopen the settings window |
+| `stylesheet.css` | `gnome-extensions disable`/`enable` |
+| `schemas/` | Nothing more; `install.sh` recompiles them |
+| `extension.js`, `src/` | Log out and back in, or use a nested shell |
+
+GNOME Shell caches imported modules for the whole session, so `disable`/`enable` keeps running the JavaScript it loaded first.
+
+To try it without touching your session, run `scripts/dev.sh`. It installs the extension and starts a nested shell, which imports every module fresh; close its window and run it again after each change. Log output goes to the terminal. The nested shell is:
 
 ```sh
 # GNOME 49 and later
@@ -33,11 +44,13 @@ dbus-run-session gnome-shell --devkit
 dbus-run-session gnome-shell --nested --wayland
 ```
 
+`--devkit` draws the nested shell in a window opened by `/usr/libexec/mutter-devkit`, which ships separately (`sudo dnf install mutter-devkit` on Fedora). Without it the nested shell runs with no window at all.
+
 ## Settings
 
 One window with a page per area:
 
-- **Mini-apps**: switch each mini-app on or off. A disabled mini-app is unloaded at once: no sensors, no polling, gone from the D-Bus API.
+- **Mini-apps**: where the island sits, and each mini-app on or off. A disabled mini-app is unloaded at once: no sensors, no polling, gone from the D-Bus API.
 - **Pomodoro**: durations.
 - **Todoist**: API token.
 
@@ -45,7 +58,13 @@ Open it from the gear button at the bottom of the expanded island, from **Linux 
 
 ## Usage
 
+- By default the island sits in the top bar, right after the clock, as a plain bar item; expanded, its card drops below the bar. Turn off **Show the island in the top bar** in the settings to have it float below the bar instead, where it can cover a window's title bar.
 - Click the pill to expand or collapse it.
+- Every loaded mini-app is a card. Scroll over the pill, vertically or horizontally, to page through them; dots below the pill show which card is current. Cards go in the order of the settings window.
+- Expanded, the card shows the mini-app's name at the top and the dots sit at the bottom left. The arrow keys page too, and Escape or a click outside collapses the island.
+- The island is frosted glass, except collapsed in the top bar: it blurs the wallpaper and windows behind it. In the overview it still shows the blurred desktop rather than the overview.
+- A card you page to stays in front until a mini-app with higher priority becomes active: privacy, then live activities, then the pomodoro, then Todoist.
+- The bubble beside the pill shows the most important other card; click it to expand that card.
 - Expanded pomodoro: reset, start/pause, skip phase.
 - A notification and sound mark the end of each phase. Phases do not auto-start; press start when ready.
 - Durations live on the Pomodoro page of the settings window. A phase already in progress keeps its length; changes apply from the next phase.
@@ -136,7 +155,7 @@ src/core/                    Pure JavaScript, no GNOME imports, runs in Node tes
   clock-format.js            MM:SS countdown text
 bin/island                   Command line client
 bin/claude-code-hook         Claude Code hook that feeds live activities
-scripts/                     Installers for the extension and the Claude Code hooks
+scripts/                     Installers for the extension and the Claude Code hooks, and the nested-shell dev loop
 src/cli/                     Command line parsing and the gdbus client
 src/integrations/claude-code/  Hook event mapping and settings.json editing (pure)
 src/shell/                   GNOME Shell only

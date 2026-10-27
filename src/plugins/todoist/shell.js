@@ -6,11 +6,19 @@ import St from 'gi://St';
 
 import {verticalBox} from '../../shell/box.js';
 import {HttpClient} from '../../shell/http.js';
+import {placeholderLabel} from '../../shell/placeholder.js';
 import {TodoistApi} from './api.js';
 import {TODOIST_TOKEN_SETTING} from './settings.js';
 import {dueLabel} from './tasks.js';
 
 const LISTED_TASKS = 8;
+
+// Pill text while there is no current task, by plugin status.
+const IDLE_TEXTS = {
+    'needs-token': 'Todoist · add a token in settings',
+    'loading': 'Todoist · loading…',
+    'ready': 'Todoist · no tasks today',
+};
 
 const taskIcon = (task, styleClass) => new St.Icon({
     icon_name: 'checkbox-symbolic',
@@ -57,12 +65,16 @@ export function createTodoistShell(plugin, {settings}) {
         compact,
         expanded,
         minimal,
-        update({tasks, current, error}) {
+        update({status, tasks, current, error}) {
             compact.destroy_all_children();
             minimal.destroy_all_children();
             expanded.destroy_all_children();
-            if (!current)
+            if (!current) {
+                compact.add_child(placeholderLabel(IDLE_TEXTS[status]));
+                if (error)
+                    expanded.add_child(new St.Label({style_class: 'todoist-error', text: error}));
                 return;
+            }
 
             compact.add_child(taskIcon(current, 'todoist-icon'));
             compact.add_child(new St.Label({
