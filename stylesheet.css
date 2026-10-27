@@ -258,3 +258,81 @@
 .privacy-stop:hover {
     background-color: rgba(255, 69, 58, 0.45);
 }
+
+.todoist-compact,
+.todoist-row {
+    spacing: 8px;
+}
+
+.todoist-title {
+    max-width: 320px;
+}
+
+.todoist-icon,
+.todoist-check-icon {
+    icon-size: 16px;
+}
+
+.todoist-priority-4 {
+    color: #ff6b5b;
+}
+
+.todoist-priority-3 {
+    color: #ffa94d;
+}
+
+.todoist-priority-2 {
+    color: #6ea8ff;
+}
+
+.todoist-list {
+    spacing: 6px;
+    min-width: 320px;
+}
+
+.todoist-heading {
+    font-size: 9pt;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.todoist-row {
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
+.todoist-row.current {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.todoist-row-title {
+    max-width: 360px;
+}
+
+.todoist-check {
+    border-radius: 99px;
+    padding: 2px;
+}
+
+.todoist-check:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+.todoist-due {
+    font-size: 9pt;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.todoist-due.overdue {
+    color: #ff6b5b;
+}
+
+.todoist-more {
+    font-size: 9pt;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.todoist-error {
+    font-size: 9pt;
+    color: #ff6b5b;
+    max-width: 360px;
+}

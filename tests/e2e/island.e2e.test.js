@@ -75,7 +75,7 @@ before(async () => {
 });
 
 test('exposes the plugins with pomodoro as foreground', () => {
-    assert.equal(cli('list'), 'pomodoro\nactivities\nprivacy');
+    assert.equal(cli('list'), 'pomodoro\nactivities\nprivacy\ntodoist');
     assert.equal(cli('foreground'), 'pomodoro');
 });
 
@@ -224,3 +224,41 @@ test('privacy plugin loads its monitors and stays hidden while nothing is in use
     assert.equal(privacy.screen, null);
     assert.notEqual(cli('foreground'), 'privacy');
 });
+
+test('without a token the Todoist plugin waits and stays hidden', () => {
+    const todoist = state('todoist');
+    assert.equal(todoist.status, 'needs-token');
+    assert.notEqual(cli('foreground'), 'todoist');
+});
+
+test('a real Todoist task due today shows in the pill beside the pomodoro bubble and completes',
+    {skip: !process.env.TODOIST_API_TOKEN && 'TODOIST_API_TOKEN not set'}, async () => {
+        const token = process.env.TODOIST_API_TOKEN;
+        const api = async (method, apiPath, body) => {
+            const response = await fetch(`https://api.todoist.com/api/v1${apiPath}`, {
+                method,
+                headers: {'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json'},
+                body: body ? JSON.stringify(body) : undefined,
+            });
+            assert.ok(response.ok, `${method} ${apiPath} failed: ${response.status}`);
+            return response.status === 204 ? null : response.json();
+        };
+        const title = `linux-island e2e ${Date.now()}`;
+        const created = await api('POST', '/tasks', {content: title, due_string: 'today', priority: 4});
+        try {
+            setSetting('todoist-api-token', token);
+            await waitFor(() => state('todoist').tasks.some(task => task.id === created.id), 'task loaded');
+            await waitFor(() => islandTexts().includes(title), 'task title on the island');
+            assert.equal(cli('foreground'), 'todoist');
+            assert.ok(bubbleState().texts.includes('25:00'), 'pomodoro missing from the bubble');
+            await sleep(400);
+            screenshot('island-todoist.png');
+
+            cli('todoist', 'complete', '--id', created.id);
+            await waitFor(() => !state('todoist').tasks.some(task => task.id === created.id), 'task completed');
+            assert.equal(state('todoist').error, null);
+        } finally {
+            setSetting('todoist-api-token', '');
+            await api('DELETE', `/tasks/${created.id}`);
+        }
+    });
