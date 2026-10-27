@@ -119,11 +119,13 @@ test('pomodoro runs, pauses, skips and resets inside the shell', async () => {
 
 test('island shows the running countdown', async () => {
     island('Activate', 'pomodoro', 'start');
-    await sleep(1500);
-    const texts = islandTexts();
-    assert.ok(texts.includes(state().countdown), `countdown missing from island: ${texts}`);
-    screenshot('island-running.png');
-    island('Activate', 'pomodoro', 'reset');
+    try {
+        // The island redraws on the once-a-second tick, so it can trail the state by up to a second.
+        await waitFor(() => islandTexts().some(text => /^24:5\d$/.test(text)), 'running countdown on the island');
+        screenshot('island-running.png');
+    } finally {
+        island('Activate', 'pomodoro', 'reset');
+    }
 });
 
 test('unknown plugins and actions return D-Bus errors', () => {
@@ -177,6 +179,7 @@ test('the Claude Code hook mirrors a session on the island', async () => {
 });
 
 const clickIslandPart = name => shellEval(`(() => {
+    const name = ${JSON.stringify(name)};
     const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
     const pill = group.get_children().find(a => a.name === 'linux-island-pill');
     const part = name === 'header' ? pill.get_first_child() : group.get_children().find(a => a.name === name);
@@ -200,21 +203,23 @@ test('an activity and the idle pomodoro share the island: pill and bubble', asyn
     assert.equal(bubbleState().visible, false);
 
     cli('activities', 'push', '--id', 'task', '--title', 'Write report');
-    await waitFor(() => bubbleState().visible, 'bubble to appear');
-    assert.ok(bubbleState().texts.includes('25:00'), `pomodoro missing from bubble: ${bubbleState().texts}`);
-    await sleep(400);
-    screenshot('island-two-slots.png');
+    try {
+        await waitFor(() => bubbleState().visible, 'bubble to appear');
+        assert.ok(bubbleState().texts.includes('25:00'), `pomodoro missing from bubble: ${bubbleState().texts}`);
+        await sleep(400);
+        screenshot('island-two-slots.png');
 
-    clickIslandPart('linux-island-bubble');
-    await waitFor(() => islandTexts().includes('Focus'), 'pomodoro expanded in the pill');
-    assert.equal(bubbleState().visible, false);
-    await sleep(400);
-    screenshot('island-bubble-expanded.png');
+        clickIslandPart('linux-island-bubble');
+        await waitFor(() => islandTexts().includes('Focus'), 'pomodoro expanded in the pill');
+        assert.equal(bubbleState().visible, false);
+        await sleep(400);
+        screenshot('island-bubble-expanded.png');
 
-    clickIslandPart('header');
-    await waitFor(() => bubbleState().visible, 'bubble back after collapsing');
-
-    cli('activities', 'end', '--id', 'task');
+        clickIslandPart('header');
+        await waitFor(() => bubbleState().visible, 'bubble back after collapsing');
+    } finally {
+        cli('activities', 'end', '--id', 'task');
+    }
     await waitFor(() => !bubbleState().visible, 'bubble gone when only the pomodoro is left');
 });
 
