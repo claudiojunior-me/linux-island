@@ -1,17 +1,12 @@
 #!/usr/bin/env node
 // ABOUTME: Command line client for the island: list plugins, read state, trigger actions, push live activities.
 // ABOUTME: Run with no arguments for usage. Talks to GNOME Shell through gdbus.
-import {execFileSync} from 'node:child_process';
-
-import {BUS_NAME, OBJECT_PATH} from '../src/core/bus-address.js';
+import {callIsland} from '../src/cli/bus-client.js';
 import {parseCommand, parseGdbusString, parseGdbusStringArray} from '../src/cli/command.js';
 
 try {
     const {method, args} = parseCommand(process.argv.slice(2));
-    const output = execFileSync('gdbus', [
-        'call', '--session', '--dest', BUS_NAME, '--object-path', OBJECT_PATH,
-        '--method', `${BUS_NAME}.${method}`, ...args,
-    ], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000});
+    const output = callIsland(method, args);
 
     if (method === 'ListPlugins')
         console.log(parseGdbusStringArray(output).join('\n'));
