@@ -36,3 +36,9 @@ test('expired activities hand the island back after a tick', () => {
     assert.equal(control.GetForeground(), 'pomodoro');
     assert.deepEqual(JSON.parse(control.GetState('activities')), {activities: []});
 });
+
+test('an activity and the idle pomodoro share the island, activity first', () => {
+    const {registry, control} = setup();
+    control.Send('activities', 'push', JSON.stringify({id: 'build', title: 'Build'}));
+    assert.deepEqual(registry.visible(2).map(plugin => plugin.id), ['activities', 'pomodoro']);
+});

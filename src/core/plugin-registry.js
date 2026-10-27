@@ -1,5 +1,5 @@
-// ABOUTME: Keeps the island's plugins and picks which one the island shows.
-// ABOUTME: Plugins need an id, a numeric priority, hasActivity() and handleAction(action, payload).
+// ABOUTME: Keeps the island's plugins and picks which ones the island shows.
+// ABOUTME: Plugins need id, numeric priority, hasActivity(), handleAction(action, payload); showsWhenIdle is optional.
 import {Listeners} from './listeners.js';
 
 export class PluginRegistry {
@@ -28,13 +28,17 @@ export class PluginRegistry {
         return [...this._plugins.values()];
     }
 
-    // The active plugin with the highest priority; the first registered one when none is active.
-    foreground() {
+    // Active plugins by priority (ties keep registration order), then idle plugins that show when idle.
+    visible(limit) {
         const plugins = this.list();
-        const active = plugins.filter(plugin => plugin.hasActivity());
-        if (active.length === 0)
-            return plugins[0] ?? null;
-        return active.reduce((best, plugin) => plugin.priority > best.priority ? plugin : best);
+        const active = plugins.filter(plugin => plugin.hasActivity())
+            .sort((a, b) => b.priority - a.priority);
+        const idle = plugins.filter(plugin => plugin.showsWhenIdle && !active.includes(plugin));
+        return [...active, ...idle].slice(0, limit);
+    }
+
+    foreground() {
+        return this.visible(1)[0] ?? null;
     }
 
     dispatch(id, action, payload) {

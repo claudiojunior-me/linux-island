@@ -43,6 +43,7 @@ export class LiveActivitiesPlugin {
         this.id = 'activities';
         this.title = 'Activities';
         this.priority = 20;
+        this.showsWhenIdle = false;
         this._clock = clock;
         this._activities = new Map();
         this._pushSequence = 0;

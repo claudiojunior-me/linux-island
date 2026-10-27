@@ -1,6 +1,6 @@
 # Linux Island
 
-A Dynamic Island for GNOME on Ubuntu and Debian. A black pill sits centered below the top bar, shows whatever plugin has something going on, and expands on click to reveal controls.
+A Dynamic Island for GNOME on Ubuntu and Debian. A black pill sits centered below the top bar and shows whatever plugin has something going on; a second plugin can run beside it in a small bubble. Click either one to expand it and reveal controls.
 
 Plugins:
 
@@ -120,7 +120,7 @@ src/cli/                     Command line parsing and the gdbus client
 src/integrations/claude-code/  Hook event mapping and settings.json editing (pure)
 src/shell/                   GNOME Shell only
   box.js                     Vertical box that works on every supported shell version
-  island.js                  The pill: positioning, compact/expanded switch, resize animation
+  island.js                  Pill and bubble: positioning, expand/collapse, resize animation
   control-bus.js             Publishes IslandControl on the session bus
   progress-bar.js            Progress bar shared by plugin views
 prefs.js                     Preferences window, driven by the settings schema
@@ -137,9 +137,9 @@ src/plugins/
 
 Each plugin is split in two: a pure part that holds behaviour and state, and a shell part that draws it. The pure part is what the tests exercise and what the D-Bus API talks to.
 
-### Foreground rule
+### What the island shows
 
-The island shows the plugin with activity and the highest `priority`. When nothing is active, it shows the first plugin in the catalog.
+Up to two plugins: active plugins ordered by `priority`, then plugins with `showsWhenIdle` in catalog order. The first goes in the pill, the second in the bubble. Clicking the pill expands its plugin; clicking the bubble expands the bubble's plugin inside the pill until you click the pill again.
 
 ### Writing a plugin
 
@@ -147,7 +147,8 @@ Pure part (`src/plugins/<name>/plugin.js`):
 
 | Member | Purpose |
 | --- | --- |
-| `id`, `title`, `priority` | Identity and foreground ranking |
+| `id`, `title`, `priority` | Identity and ranking on the island |
+| `showsWhenIdle` | `true` to stay on the island without activity, e.g. the pomodoro start button |
 | `hasActivity()` | `true` when the plugin wants the island |
 | `handleAction(action, payload)` | Reacts to buttons, D-Bus `Activate` and `Send` (payload is the parsed JSON object); throws on unknown actions |
 | `getState()` | JSON-serializable state for views and D-Bus `GetState` |
@@ -155,7 +156,7 @@ Pure part (`src/plugins/<name>/plugin.js`):
 | `tick()` | Optional, called once a second |
 | `destroy()` | Releases resources |
 
-Shell part (`src/plugins/<name>/shell.js`) exports a factory `(plugin, {settings})` returning `{compact, expanded, update(state), destroy()}`, where `compact` and `expanded` are St actors.
+Shell part (`src/plugins/<name>/shell.js`) exports a factory `(plugin, {settings})` returning `{compact, expanded, minimal, update(state), destroy()}`. `compact` and `expanded` go in the pill, `minimal` in the bubble; all three are St actors.
 
 Register both in `src/plugins/catalog.js`.
 
