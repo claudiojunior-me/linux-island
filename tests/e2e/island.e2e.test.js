@@ -182,7 +182,9 @@ const clickIslandPart = name => shellEval(`(() => {
     const name = ${JSON.stringify(name)};
     const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
     const pill = group.get_children().find(a => a.name === 'linux-island-pill');
-    const part = name === 'header' ? pill.get_first_child() : group.get_children().find(a => a.name === name);
+    const part = name === 'header'
+        ? pill.get_children().find(a => a.has_style_class_name('island-header'))
+        : group.get_children().find(a => a.name === name);
     part.emit('clicked', 1);
     return true;
 })()`);
@@ -485,4 +487,80 @@ test('paging the collapsed pill shows the dots below it for a moment', async () 
     assert.equal(pageDots('linux-island-peek-dots').shown, false);
     pageCollapsedIsland(-1);
     await waitFor(() => pillShows('25:00') && pillSettled(), 'pomodoro back in the pill');
+});
+
+// Text of the card title above the expanded content, or null while it is not on screen.
+const cardTitle = () => shellEval(`(() => {
+    let title = null;
+    const walk = actor => {
+        if (actor.name === 'linux-island-card-title' && actor.mapped) title = actor.text;
+        actor.get_children().forEach(walk);
+    };
+    walk(Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island'));
+    return title;
+})()`);
+
+test('expanded cards show the mini-app title, the collapsed pill does not', async () => {
+    assert.equal(cardTitle(), null);
+    clickIslandPart('header');
+    await waitFor(() => cardTitle() === 'Pomodoro', 'pomodoro title');
+    try {
+        pressKey('Right');
+        await waitFor(() => cardTitle() === 'Activities' && pillSettled(), 'activities title');
+        await sleep(200);
+        screenshot('island-expanded-title.png');
+        pressKey('Left');
+        await waitFor(() => cardTitle() === 'Pomodoro' && pillSettled(), 'pomodoro title again');
+    } finally {
+        pressKey('Escape');
+    }
+    await waitFor(() => cardTitle() === null, 'title hidden when collapsed');
+});
+
+test('the pill, the bubble and the page dots are frosted glass', async () => {
+    cli('activities', 'push', '--id', 'glass', '--title', 'Glass check');
+    try {
+        await waitFor(() => bubbleState().visible, 'bubble beside the pill');
+        await sleep(400);
+        const glass = shellEval(`(() => {
+            const names = ['linux-island-pill', 'linux-island-bubble', 'linux-island-peek-dots'];
+            const actors = {};
+            const walk = actor => {
+                actors[actor.name] = actor;
+                actor.get_children().forEach(walk);
+            };
+            walk(Main.layoutManager.uiGroup);
+            return Object.fromEntries(names.map(name => {
+                const surface = actors[name];
+                const backdrop = actors[name + '-glass'];
+                if (!backdrop) return [name, null];
+                const [x, y] = surface.get_transformed_position();
+                return [name, {
+                    effects: backdrop.get_effects().map(effect => effect.name),
+                    blursTheScene: backdrop.get_first_child()?.source === global.window_group,
+                    followsSurface: backdrop.visible === surface.mapped && (!surface.mapped ||
+                        (Math.round(backdrop.x) === Math.round(x) && Math.round(backdrop.y) === Math.round(y) &&
+                         Math.round(backdrop.width) === Math.round(surface.width) &&
+                         Math.round(backdrop.height) === Math.round(surface.height))),
+                    belowSurface: (() => {
+                        let root = surface;
+                        while (root.get_parent() !== Main.layoutManager.uiGroup) root = root.get_parent();
+                        const layers = Main.layoutManager.uiGroup.get_children();
+                        return layers.indexOf(backdrop) < layers.indexOf(root);
+                    })(),
+                }];
+            }));
+        })()`);
+        for (const name of ['linux-island-pill', 'linux-island-bubble', 'linux-island-peek-dots']) {
+            assert.deepEqual(glass[name], {
+                effects: ['island-glass-corners', 'island-glass-blur'],
+                blursTheScene: true,
+                followsSurface: true,
+                belowSurface: true,
+            }, name);
+        }
+        screenshot('island-glass.png');
+    } finally {
+        cli('activities', 'end', '--id', 'glass');
+    }
 });

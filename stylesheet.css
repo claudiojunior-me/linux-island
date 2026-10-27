@@ -1,8 +1,9 @@
 /* ABOUTME: Look of the island pill and the pomodoro plugin views. */
-/* ABOUTME: Black pill like Apple's Dynamic Island; phase colors mark focus versus breaks. */
+/* ABOUTME: Dark frosted glass surfaces over a blurred background; phase colors mark focus versus breaks. */
 
 .island {
-    background-color: rgba(0, 0, 0, 0.94);
+    background-color: rgba(18, 18, 22, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     color: #ffffff;
     border-radius: 18px;
     padding: 6px 16px;
@@ -14,14 +15,15 @@
 }
 
 .island-bubble {
-    background-color: rgba(0, 0, 0, 0.94);
+    background-color: rgba(18, 18, 22, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     color: #ffffff;
     border-radius: 18px;
     padding: 6px 12px;
 }
 
 .island-bubble:hover {
-    background-color: rgba(30, 30, 30, 0.94);
+    background-color: rgba(40, 40, 46, 0.6);
 }
 
 .island-bubble-label {
@@ -34,9 +36,17 @@
 }
 
 .island:expanded {
+    background-color: rgba(18, 18, 22, 0.62);
     border-radius: 26px;
     padding: 12px 22px 16px;
     min-width: 260px;
+}
+
+.island-card-title {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.8em;
+    font-weight: bold;
+    padding-bottom: 6px;
 }
 
 .island-expanded-content {
@@ -64,7 +74,8 @@
 }
 
 .island-peek-dots {
-    background-color: rgba(0, 0, 0, 0.94);
+    background-color: rgba(18, 18, 22, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 99px;
     padding: 4px 7px;
 }

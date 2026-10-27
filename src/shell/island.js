@@ -10,6 +10,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {CardDeck} from '../core/card-deck.js';
 import {ScrollSteps} from '../core/scroll-steps.js';
 import {verticalBox} from './box.js';
+import {makeGlass} from './glass.js';
 import {PageDots} from './page-dots.js';
 
 const GAP_BELOW_PANEL = 6;
@@ -63,6 +64,7 @@ export class Island {
         this._pill = verticalBox({
             name: 'linux-island-pill', style_class: 'island', reactive: true, clip_to_allocation: true,
         });
+        this._title = new St.Label({name: 'linux-island-card-title', style_class: 'island-card-title', visible: false});
         this._header = new St.Button({style_class: 'island-header', x_expand: true});
         this._expandedBin = new St.Bin({style_class: 'island-expanded-content', visible: false});
         this._footer = new St.BoxLayout({style_class: 'island-footer', visible: false});
@@ -84,11 +86,14 @@ export class Island {
         this._bubble = new St.Button({
             name: 'linux-island-bubble', style_class: 'island-bubble', y_align: Clutter.ActorAlign.START, visible: false,
         });
+        this._pill.add_child(this._title);
         this._pill.add_child(this._header);
         this._pill.add_child(this._expandedBin);
         this._pill.add_child(this._footer);
         this.actor.add_child(this._pill);
         this.actor.add_child(this._bubble);
+        // What slides when the user pages from one card to the next.
+        this._cardParts = [this._title, this._header, this._expandedBin];
 
         this._header.connect('clicked', () => this._setExpanded(!this._expanded));
         this._bubble.connect('clicked', () => {
@@ -115,6 +120,7 @@ export class Island {
         Main.layoutManager.addTopChrome(this.actor, {trackFullscreen: true});
         // Left out of the chrome so the dots stay outside the input region.
         Main.layoutManager.uiGroup.add_child(this._peekDots.actor);
+        [this._pill, this._bubble, this._peekDots.actor].forEach(makeGlass);
         this._sync();
     }
 
@@ -312,7 +318,7 @@ export class Island {
     _slide(direction, swap) {
         this._settleSlide();
         this._pendingSwap = swap;
-        const parts = [this._header, this._expandedBin];
+        const parts = this._cardParts;
         parts.forEach(part => part.ease({
             opacity: 0,
             translation_x: -direction * SLIDE_DISTANCE,
@@ -342,7 +348,7 @@ export class Island {
         this._header.disconnect_object(this);
         const swap = this._pendingSwap;
         this._pendingSwap = null;
-        for (const part of [this._header, this._expandedBin]) {
+        for (const part of this._cardParts) {
             part.remove_all_transitions();
             part.opacity = 255;
             part.translation_x = 0;
@@ -362,6 +368,8 @@ export class Island {
 
     _showInPill(plugin, expanded) {
         const shell = this._shells.get(plugin.id);
+        this._title.text = plugin.title;
+        this._title.visible = expanded;
         this._header.set_child(shell.compact);
         this._expandedBin.set_child(shell.expanded);
         this._expandedBin.visible = expanded;

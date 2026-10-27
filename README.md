@@ -60,7 +60,8 @@ Open it from the gear button at the bottom of the expanded island, from **Linux 
 
 - Click the pill to expand or collapse it.
 - Every loaded mini-app is a card. Scroll over the pill, vertically or horizontally, to page through them; dots below the pill show which card is current. Cards go in the order of the settings window.
-- Expanded, the dots sit at the bottom left. The arrow keys page too, and Escape or a click outside collapses the island.
+- Expanded, the card shows the mini-app's name at the top and the dots sit at the bottom left. The arrow keys page too, and Escape or a click outside collapses the island.
+- The island is frosted glass: it blurs the wallpaper and windows behind it. In the overview it still shows the blurred desktop rather than the overview.
 - A card you page to stays in front until a mini-app with higher priority becomes active: privacy, then live activities, then the pomodoro, then Todoist.
 - The bubble beside the pill shows the most important other card; click it to expand that card.
 - Expanded pomodoro: reset, start/pause, skip phase.
