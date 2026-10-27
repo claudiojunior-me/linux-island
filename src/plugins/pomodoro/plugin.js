@@ -46,6 +46,11 @@ export class PomodoroPlugin {
         this._listeners.emit({type: 'changed'});
     }
 
+    configure(timerOptions) {
+        this._timer.configure(timerOptions);
+        this._listeners.emit({type: 'changed'});
+    }
+
     // Called by the host about once a second while the plugin is loaded.
     tick() {
         const now = this._clock();

@@ -121,3 +121,12 @@ test('unknown actions and plugins are rejected', () => {
     assert.throws(() => control.Activate('nope', 'toggle'), /unknown plugin: nope/);
     assert.throws(() => control.GetState('nope'), /unknown plugin: nope/);
 });
+
+test('configure changes the countdown shown while idle', () => {
+    const {pomodoro, control} = setup();
+    const events = [];
+    pomodoro.subscribe(event => events.push(event));
+    pomodoro.configure({workMinutes: 1});
+    assert.equal(JSON.parse(control.GetState('pomodoro')).countdown, '01:00');
+    assert.deepEqual(events, [{type: 'changed'}]);
+});

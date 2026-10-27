@@ -139,3 +139,43 @@ test('rejects non-positive durations', () => {
     assert.throws(() => new PomodoroTimer({workMinutes: 0}), /workMinutes/);
     assert.throws(() => new PomodoroTimer({sessionsBeforeLongBreak: -1}), /sessionsBeforeLongBreak/);
 });
+
+test('configure on an untouched phase applies the new duration right away', () => {
+    const timer = shortTimer();
+    timer.configure({workMinutes: 1});
+    assert.equal(timer.snapshot(0).totalMs, MINUTE);
+    assert.equal(timer.snapshot(0).remainingMs, MINUTE);
+});
+
+test('configure mid-phase keeps the current phase and changes the next ones', () => {
+    const timer = shortTimer();
+    timer.start(0);
+    timer.configure({workMinutes: 50, shortBreakMinutes: 10});
+    assert.equal(timer.snapshot(MINUTE).totalMs, 25 * MINUTE);
+    assert.equal(timer.snapshot(MINUTE).remainingMs, 24 * MINUTE);
+
+    timer.tick(25 * MINUTE);
+    assert.equal(timer.snapshot(25 * MINUTE).totalMs, 10 * MINUTE);
+});
+
+test('configure on a paused phase with elapsed time keeps the current duration', () => {
+    const timer = shortTimer();
+    timer.start(0);
+    timer.pause(MINUTE);
+    timer.configure({workMinutes: 1});
+    assert.equal(timer.snapshot(MINUTE).remainingMs, 24 * MINUTE);
+});
+
+test('configure keeps unspecified settings', () => {
+    const timer = shortTimer();
+    timer.configure({workMinutes: 30});
+    timer.skip();
+    assert.equal(timer.snapshot(0).totalMs, 5 * MINUTE);
+});
+
+test('configure rejects non-positive values and leaves settings untouched', () => {
+    const timer = shortTimer();
+    assert.throws(() => timer.configure({shortBreakMinutes: 0}), /shortBreakMinutes/);
+    timer.skip();
+    assert.equal(timer.snapshot(0).totalMs, 5 * MINUTE);
+});
