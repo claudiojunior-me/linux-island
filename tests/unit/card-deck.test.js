@@ -116,3 +116,15 @@ test('runner-up is null when only the current card is visible', () => {
     const {deck} = setup(['idle'], [plugin('idle', {showsWhenIdle: true})]);
     assert.equal(deck.runnerUp(), null);
 });
+
+test('position gives the current card index among the loaded cards', () => {
+    const {deck} = setup(['a', 'b', 'c'], [plugin('a', {showsWhenIdle: true}), plugin('c')]);
+    assert.deepEqual(deck.position(), {index: 0, count: 2});
+    deck.next();
+    assert.deepEqual(deck.position(), {index: 1, count: 2});
+});
+
+test('position has no index when no card is showing', () => {
+    const {deck} = setup(['a'], [plugin('a')]);
+    assert.deepEqual(deck.position(), {index: -1, count: 1});
+});

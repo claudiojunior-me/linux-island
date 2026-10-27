@@ -47,6 +47,28 @@
     padding-top: 6px;
 }
 
+.island-page-dots {
+    spacing: 5px;
+}
+
+.island-page-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+.island-page-dot.active {
+    width: 14px;
+    background-color: #ffffff;
+}
+
+.island-peek-dots {
+    background-color: rgba(0, 0, 0, 0.94);
+    border-radius: 99px;
+    padding: 4px 7px;
+}
+
 .island-settings-button {
     border-radius: 99px;
     padding: 4px;

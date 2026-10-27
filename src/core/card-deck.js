@@ -19,6 +19,12 @@ export class CardDeck {
         return (this._chosenId !== null && this._registry.get(this._chosenId)) || this._registry.foreground();
     }
 
+    // Where the current card sits among the loaded cards; index is -1 when no card is showing.
+    position() {
+        const cards = this.cards();
+        return {index: cards.indexOf(this.current()), count: cards.length};
+    }
+
     // The most important visible plugin other than the current card.
     runnerUp() {
         const current = this.current();

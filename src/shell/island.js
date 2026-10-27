@@ -1,6 +1,7 @@
 // ABOUTME: The island drawn below the top bar: a pill with the current card and a bubble with the runner-up.
-// ABOUTME: Scrolling pages through the cards; expanded, the pill takes the keyboard for arrows and Escape.
+// ABOUTME: Scrolling pages through the cards with a slide and page dots; expanded, arrows and Escape work too.
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
@@ -9,10 +10,17 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {CardDeck} from '../core/card-deck.js';
 import {ScrollSteps} from '../core/scroll-steps.js';
 import {verticalBox} from './box.js';
+import {PageDots} from './page-dots.js';
 
 const GAP_BELOW_PANEL = 6;
 const RESIZE_DURATION_MS = 250;
 const BUBBLE_FADE_MS = 200;
+const SLIDE_DISTANCE = 28;
+const SLIDE_OUT_MS = 110;
+const SLIDE_IN_MS = 220;
+const PEEK_DOTS_GAP = 4;
+const PEEK_DOTS_SHOWN_MS = 1200;
+const PEEK_DOTS_FADE_MS = 200;
 
 const PREVIOUS_KEYS = [Clutter.KEY_Left, Clutter.KEY_Up];
 const NEXT_KEYS = [Clutter.KEY_Right, Clutter.KEY_Down];
@@ -45,6 +53,9 @@ export class Island {
         this._bubbleId = null;
         this._expanded = false;
         this._grab = null;
+        this._pageDirection = 0;
+        this._pendingSwap = null;
+        this._peekTimeoutId = 0;
         this._renderedStates = new Map();
         this._disconnects = [];
 
@@ -63,7 +74,13 @@ export class Island {
             child: new St.Icon({icon_name: 'emblem-system-symbolic', style_class: 'island-settings-icon'}),
         });
         settingsButton.connect('clicked', () => openSettings());
+        this._footerDots = new PageDots({name: 'linux-island-footer-dots'});
+        this._footer.add_child(this._footerDots.actor);
         this._footer.add_child(settingsButton);
+        // Shown below the collapsed pill for a moment after paging.
+        this._peekDots = new PageDots({
+            name: 'linux-island-peek-dots', style_class: 'island-page-dots island-peek-dots', visible: false, opacity: 0,
+        });
         this._bubble = new St.Button({
             name: 'linux-island-bubble', style_class: 'island-bubble', y_align: Clutter.ActorAlign.START, visible: false,
         });
@@ -82,6 +99,8 @@ export class Island {
         this._pill.connect('key-press-event', (_actor, event) => this._onKeyPress(event));
         this.actor.connect('captured-event', (_actor, event) => this._onCapturedEvent(event));
         this.actor.connect('notify::width', () => this._reposition());
+        this._pill.connect('notify::height', () => this._reposition());
+        this._peekDots.actor.connect('notify::width', () => this._reposition());
 
         this._disconnects.push(registry.subscribe(() => {
             this._trackPlugins();
@@ -94,15 +113,21 @@ export class Island {
         this._disconnects.push(() => Main.layoutManager.disconnect(monitorsId));
 
         Main.layoutManager.addTopChrome(this.actor, {trackFullscreen: true});
+        // Left out of the chrome so the dots stay outside the input region.
+        Main.layoutManager.uiGroup.add_child(this._peekDots.actor);
         this._sync();
     }
 
     destroy() {
         this._releaseKeyboard();
         this._disconnects.forEach(disconnect => disconnect());
+        if (this._peekTimeoutId)
+            GLib.source_remove(this._peekTimeoutId);
+        this._settleSlide();
         this._header.set_child(null);
         this._expandedBin.set_child(null);
         this._bubble.set_child(null);
+        this._peekDots.actor.destroy();
         Main.layoutManager.removeChrome(this.actor);
         this.actor.destroy();
     }
@@ -123,6 +148,7 @@ export class Island {
         }
 
         if (this._pillId !== null && !registered.has(this._pillId)) {
+            this._settleSlide();
             this._header.set_child(null);
             this._expandedBin.set_child(null);
             this._pillId = null;
@@ -162,11 +188,41 @@ export class Island {
     }
 
     _page(step) {
+        if (step === 0)
+            return;
         if (step < 0)
             this._deck.previous();
-        else if (step > 0)
+        else
             this._deck.next();
+        this._pageDirection = step;
         this._sync();
+        this._pageDirection = 0;
+        if (!this._expanded)
+            this._peek();
+    }
+
+    // Fades the dots in below the collapsed pill, then out again once paging stops.
+    _peek() {
+        const dots = this._peekDots.actor;
+        dots.remove_all_transitions();
+        dots.show();
+        dots.ease({opacity: 255, duration: PEEK_DOTS_FADE_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        if (this._peekTimeoutId)
+            GLib.source_remove(this._peekTimeoutId);
+        this._peekTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PEEK_DOTS_SHOWN_MS, () => {
+            this._peekTimeoutId = 0;
+            this._hidePeek();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _hidePeek() {
+        const dots = this._peekDots.actor;
+        dots.remove_all_transitions();
+        dots.ease({
+            opacity: 0, duration: PEEK_DOTS_FADE_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => dots.hide(),
+        });
     }
 
     _onScroll(event) {
@@ -216,9 +272,15 @@ export class Island {
             this._expanded = false;
             this._releaseKeyboard();
             this.actor.hide();
+            this._peekDots.actor.hide();
             return;
         }
         this.actor.show();
+        const position = this._deck.position();
+        this._footerDots.update(position);
+        this._peekDots.update(position);
+        if (this._expanded && this._peekDots.actor.visible)
+            this._hidePeek();
 
         const expanded = this._expanded;
         const bubblePlugin = expanded ? null : this._deck.runnerUp();
@@ -229,12 +291,63 @@ export class Island {
 
         if (pillPlugin.id !== this._pillId || expanded !== this._pillExpanded) {
             const change = () => this._showInPill(pillPlugin, expanded);
-            if (this._pillId === null)
+            const paged = this._pageDirection !== 0 && this._pillId !== null && pillPlugin.id !== this._pillId;
+            const first = this._pillId === null;
+            this._pillId = pillPlugin.id;
+            this._pillExpanded = expanded;
+            if (first) {
                 change();
-            else
+            } else if (paged) {
+                this._slide(this._pageDirection, change);
+            } else {
+                this._settleSlide();
                 this._resizeAnimated(change);
+            }
         }
         this._showInBubble(bubblePlugin);
+    }
+
+    // Slides the current card out toward where the user paged, then the next card in from the other side
+    // while the pill takes its size.
+    _slide(direction, swap) {
+        this._settleSlide();
+        this._pendingSwap = swap;
+        const parts = [this._header, this._expandedBin];
+        parts.forEach(part => part.ease({
+            opacity: 0,
+            translation_x: -direction * SLIDE_DISTANCE,
+            duration: SLIDE_OUT_MS,
+            mode: Clutter.AnimationMode.EASE_IN_QUAD,
+        }));
+        this._header.connect_object('transitions-completed', () => {
+            this._header.disconnect_object(this);
+            if (this._pendingSwap !== swap)
+                return;
+            this._pendingSwap = null;
+            this._resizeAnimated(swap);
+            parts.forEach(part => {
+                part.translation_x = direction * SLIDE_DISTANCE;
+                part.ease({
+                    opacity: 255,
+                    translation_x: 0,
+                    duration: SLIDE_IN_MS,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                });
+            });
+        }, this);
+    }
+
+    // Ends any slide at once: a swap still waiting is applied and the card is shown in place.
+    _settleSlide() {
+        this._header.disconnect_object(this);
+        const swap = this._pendingSwap;
+        this._pendingSwap = null;
+        for (const part of [this._header, this._expandedBin]) {
+            part.remove_all_transitions();
+            part.opacity = 255;
+            part.translation_x = 0;
+        }
+        swap?.();
     }
 
     // Redraws a plugin's views only when its state changed, so rows under the pointer are not rebuilt.
@@ -257,8 +370,6 @@ export class Island {
             this._pill.add_style_pseudo_class('expanded');
         else
             this._pill.remove_style_pseudo_class('expanded');
-        this._pillId = plugin.id;
-        this._pillExpanded = expanded;
     }
 
     _showInBubble(plugin) {
@@ -280,10 +391,12 @@ export class Island {
     // Applies a content change, then grows or shrinks the pill from its old size to the new one.
     _resizeAnimated(change) {
         const [startWidth, startHeight] = this._pill.get_size();
+        this._pill.remove_all_transitions();
         change();
 
+        // Measures at the natural size, not at a fixed size left by a resize this one interrupted.
+        this._pill.set_size(-1, -1);
         const [, , targetWidth, targetHeight] = this._pill.get_preferred_size();
-        this._pill.remove_all_transitions();
         this._pill.set_size(startWidth, startHeight);
         this._pill.ease({
             width: targetWidth,
@@ -303,5 +416,8 @@ export class Island {
         this.actor.set_position(
             Math.round(monitor.x + (monitor.width - this.actor.width) / 2),
             panelBox.y + panelBox.height + GAP_BELOW_PANEL);
+        this._peekDots.actor.set_position(
+            Math.round(this.actor.x + (this._pill.width - this._peekDots.actor.width) / 2),
+            this.actor.y + this._pill.height + PEEK_DOTS_GAP);
     }
 }

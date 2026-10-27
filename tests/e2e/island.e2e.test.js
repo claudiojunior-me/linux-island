@@ -422,3 +422,67 @@ test('a plugin with higher priority becoming active takes over a chosen card', a
     }
     await waitFor(() => pillShows('25:00'), 'pomodoro back once the activity ends');
 });
+
+// A page-dots row anywhere in the shell by name: whether it shows, how many dots, which one is marked.
+const pageDots = name => shellEval(`(() => {
+    let row = null;
+    const walk = actor => {
+        if (actor.name === ${JSON.stringify(name)}) row = actor;
+        actor.get_children().forEach(walk);
+    };
+    walk(Main.layoutManager.uiGroup);
+    if (!row) return {shown: false, count: 0, active: -1};
+    const dots = row.get_children();
+    return {
+        shown: row.mapped && row.opacity > 0,
+        count: dots.length,
+        active: dots.findIndex(dot => dot.has_style_class_name('active')),
+    };
+})()`);
+
+// Cards finish their slide fully visible and back in place, and the pill ends at its natural size.
+const pillSettled = () => shellEval(`(() => {
+    const group = Main.layoutManager.uiGroup.get_children().find(a => a.name === 'linux-island');
+    const pill = group.get_children().find(a => a.name === 'linux-island-pill');
+    const [, naturalHeight] = pill.get_preferred_height(-1);
+    return pill.get_children().every(part => part.opacity === 255 && part.translation_x === 0) &&
+        Math.round(pill.height) === Math.round(naturalHeight);
+})()`);
+
+// Pages the collapsed pill the way a scroll does; the headless shell cannot deliver that scroll.
+const pageCollapsedIsland = step => shellEval(`(() => {
+    Main.extensionManager.lookup('linux-island@claudiojunior-me.github.io').stateObj._island._page(${step});
+    return true;
+})()`);
+
+test('the expanded pill shows a dot per card with the current one marked', async () => {
+    clickIslandPart('header');
+    await waitFor(() => settingsButtonVisible(), 'expanded pill');
+    try {
+        assert.deepEqual(pageDots('linux-island-footer-dots'), {shown: true, count: 4, active: 0});
+        pressKey('Right');
+        await waitFor(() => pillShows('No live activities') && pillSettled(), 'activities card slid in');
+        assert.equal(pageDots('linux-island-footer-dots').active, 1);
+        await sleep(200);
+        screenshot('island-expanded-dots.png');
+        pressKey('Left');
+        await waitFor(() => pillShows('Focus') && pillSettled(), 'pomodoro card slid back');
+    } finally {
+        pressKey('Escape');
+    }
+    await waitFor(() => !settingsButtonVisible(), 'collapsed');
+    assert.equal(pageDots('linux-island-footer-dots').shown, false);
+});
+
+test('paging the collapsed pill shows the dots below it for a moment', async () => {
+    assert.equal(pageDots('linux-island-peek-dots').shown, false);
+    pageCollapsedIsland(1);
+    await waitFor(() => pageDots('linux-island-peek-dots').shown, 'dots below the pill');
+    assert.deepEqual(pageDots('linux-island-peek-dots'), {shown: true, count: 4, active: 1});
+    await waitFor(() => pillShows('No live activities') && pillSettled(), 'activities card slid in');
+    screenshot('island-peek-dots.png');
+    await sleep(2000);
+    assert.equal(pageDots('linux-island-peek-dots').shown, false);
+    pageCollapsedIsland(-1);
+    await waitFor(() => pillShows('25:00') && pillSettled(), 'pomodoro back in the pill');
+});

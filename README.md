@@ -59,6 +59,10 @@ Open it from the gear button at the bottom of the expanded island, from **Linux 
 ## Usage
 
 - Click the pill to expand or collapse it.
+- Every loaded mini-app is a card. Scroll over the pill, vertically or horizontally, to page through them; dots below the pill show which card is current. Cards go in the order of the settings window.
+- Expanded, the dots sit at the bottom left. The arrow keys page too, and Escape or a click outside collapses the island.
+- A card you page to stays in front until a mini-app with higher priority becomes active: privacy, then live activities, then the pomodoro, then Todoist.
+- The bubble beside the pill shows the most important other card; click it to expand that card.
 - Expanded pomodoro: reset, start/pause, skip phase.
 - A notification and sound mark the end of each phase. Phases do not auto-start; press start when ready.
 - Durations live on the Pomodoro page of the settings window. A phase already in progress keeps its length; changes apply from the next phase.
